@@ -6,7 +6,7 @@ on:
   workflow_dispatch:        # manual trigger from GitHub UI
   push:
     branches: [main]
-    paths: ['Finvault.py']   # re-run whenever you edit the script
+    paths: ['Finvault.py']  # re-run whenever you edit the script
 
 permissions:
   contents: write           # needed to commit index.html back to repo
@@ -29,8 +29,15 @@ jobs:
 
       - name: Generate site
         env:
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          # ── Backend (Firestore Admin) ──────────────────────────
+          FIREBASE_SERVICE_ACCOUNT:         ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_PROJECT_ID:              ${{ secrets.FIREBASE_PROJECT_ID }}
+          # ── Frontend (injected into index.html at build time) ──
+          FIREBASE_API_KEY:                 ${{ secrets.FIREBASE_API_KEY }}
+          FIREBASE_AUTH_DOMAIN:             ${{ secrets.FIREBASE_AUTH_DOMAIN }}
+          FIREBASE_STORAGE_BUCKET:          ${{ secrets.FIREBASE_STORAGE_BUCKET }}
+          FIREBASE_MESSAGING_SENDER_ID:     ${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
+          FIREBASE_APP_ID:                  ${{ secrets.FIREBASE_APP_ID }}
         run: python Finvault.py
 
       - name: Commit and push
