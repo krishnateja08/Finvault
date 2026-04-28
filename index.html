@@ -7,6 +7,44 @@
 <meta name="description" content="Professional financial calculators and live market signals. SIP, FIRE, EMI, tax, and BUY/HOLD/WAIT signals for gold, crypto, stocks, property.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@300;400;500;600;700;800;900&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<!-- ── Firebase Google Auth ─────────────────────────────── -->
+<script type="module">
+  import { initializeApp }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+  // ⚠ These are FRONTEND (web) config values — safe to embed.
+  // Get them from: Firebase Console → Project Settings → General → Your apps → Web app
+  const firebaseConfig = {
+    apiKey:            "REPLACE_WITH_YOUR_WEB_API_KEY",
+    authDomain:        "finvault-pro-910dc.firebaseapp.com",
+    projectId:         "finvault-pro-910dc",
+    storageBucket:     "finvault-pro-910dc.appspot.com",
+    messagingSenderId: "REPLACE_WITH_MESSAGING_SENDER_ID",
+    appId:             "REPLACE_WITH_APP_ID",
+  };
+
+  const app      = initializeApp(firebaseConfig);
+  const auth     = getAuth(app);
+  const provider = new GoogleAuthProvider();
+
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      document.getElementById("fv-auth-wall").style.display = "none";
+      document.getElementById("fv-app").style.display       = "block";
+      const nameEl = document.getElementById("fv-user-name");
+      if (nameEl) nameEl.textContent = user.displayName || user.email;
+    } else {
+      document.getElementById("fv-auth-wall").style.display = "flex";
+      document.getElementById("fv-app").style.display       = "none";
+    }
+  });
+
+  window.fvSignIn  = () => signInWithPopup(auth, provider).catch(e => alert("Sign-in failed: " + e.message));
+  window.fvSignOut = () => signOut(auth);
+</script>
 <style>
 :root {
   --bg:#05080f; --bg2:#080d18; --surface:#0c1220; --card:#0f1626; --card2:#121b2e;
@@ -258,7 +296,18 @@ tr:hover td{background:var(--surface)}
 /* ─ Footer ─ */
 footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem;font-size:10px;color:var(--muted);font-family:var(--mono)}
 .footer-trust{display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap}
-/* ─ No-profile notice ─ */
+/* ─ Auth wall ─ */
+#fv-auth-wall{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:var(--bg);gap:1.5rem;padding:2rem}
+.auth-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:2.5rem 2rem;display:flex;flex-direction:column;align-items:center;gap:1.2rem;max-width:360px;width:100%;text-align:center}
+.auth-logo{font-size:28px;font-weight:900;letter-spacing:-.04em;color:#fff}.auth-logo span{color:var(--blue)}
+.auth-tagline{font-size:13px;color:var(--text2);line-height:1.6}
+.auth-btn{display:flex;align-items:center;gap:10px;background:#fff;color:#1f1f1f;border:none;border-radius:6px;padding:11px 22px;font-size:14px;font-weight:600;cursor:pointer;transition:box-shadow .15s;width:100%;justify-content:center}
+.auth-btn:hover{box-shadow:0 2px 12px rgba(0,0,0,.25)}
+.auth-btn svg{flex-shrink:0}
+.auth-note{font-size:10px;color:var(--muted);font-family:var(--mono)}
+/* ─ User bar ─ */
+#fv-user-bar{display:flex;align-items:center;gap:10px;padding:5px 14px;background:var(--surface);border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);justify-content:flex-end}
+#fv-user-bar button{background:none;border:1px solid var(--border2);color:var(--text2);font-size:10px;padding:3px 10px;border-radius:3px;cursor:pointer;font-family:var(--sans)}
 .no-profile-notice{background:rgba(26,107,255,.06);border:1px solid rgba(26,107,255,.2);border-radius:6px;padding:1.5rem;text-align:center;color:var(--text2);font-size:13px}
 .no-profile-notice h3{color:#fff;margin-bottom:.5rem;font-size:16px}
 /* ─ Profile saved msg ─ */
@@ -266,6 +315,25 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
 /* ─ Sensitivity row ─ */
 .sens-row{display:flex;justify-content:space-between;padding:.25rem 0;border-bottom:1px solid var(--border);font-size:11px;font-family:var(--mono)}
 .sens-row:last-child{border-bottom:none}
+/* ─ Summary bar ─ */
+.summary-bar{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--border);background:var(--bg)}
+@media(max-width:600px){.summary-bar{grid-template-columns:1fr 1fr}}
+.sum-cell{padding:.75rem 1rem;border-right:1px solid var(--border)}
+.sum-cell:last-child{border-right:none}
+.sum-label{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--label);margin-bottom:3px}
+.sum-value{font-family:var(--mono);font-size:15px;font-weight:600;color:#fff;line-height:1}
+.sum-value.green{color:var(--green)}.sum-value.blue{color:var(--blue)}.sum-value.amber{color:var(--amber)}.sum-value.red{color:var(--red)}
+.sum-action{font-size:10px;color:var(--text2);margin-top:3px;line-height:1.4}
+/* ─ Number counter animation ─ */
+@keyframes numPop{0%{opacity:.4;transform:translateY(4px)}100%{opacity:1;transform:none}}
+.num-animated{animation:numPop .45s ease forwards}
+/* ─ Pie chart container ─ */
+.pie-wrap{display:flex;flex-direction:column;align-items:center;gap:.75rem;margin-top:.75rem}
+.pie-legend{display:flex;flex-direction:column;gap:4px;width:100%;max-width:300px}
+.pie-legend-row{display:flex;align-items:center;justify-content:space-between;font-size:11px;gap:6px}
+.pie-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+.pie-legend-label{flex:1;color:var(--text2)}
+.pie-legend-val{font-family:var(--mono);color:var(--text);font-size:11px}
 
 /* ═══════════════════════════════════════════════
    RESPONSIVE — MOBILE FIXES
@@ -337,9 +405,32 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
 </head>
 <body>
 
+<!-- ══ AUTH WALL — shown until user signs in ══════════════ -->
+<div id="fv-auth-wall" style="display:none">
+  <div class="auth-card">
+    <div class="auth-logo">Fin<span>Vault</span><sup style="font-size:12px;color:var(--text2);font-weight:400">PRO</sup></div>
+    <p class="auth-tagline">Professional financial intelligence — live market signals, calculators &amp; your personal dashboard.</p>
+    <button class="auth-btn" onclick="fvSignIn()">
+      <!-- Google G logo -->
+      <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Sign in with Google
+    </button>
+    <span class="auth-note">Your data is never sold &middot; Educational use only</span>
+  </div>
+</div>
+
+<!-- ══ APP — hidden until authenticated ══════════════════ -->
+<div id="fv-app" style="display:none">
+
+<!-- User bar -->
+<div id="fv-user-bar">
+  <span>Signed in as <strong id="fv-user-name"></strong></span>
+  <button onclick="fvSignOut()">Sign out</button>
+</div>
+
 <!-- Status strip -->
 <div class="status-strip">
-  <div class="strip-left"><span class="market-pill"><span class="m-dot dot-red"></span><span class="m-exch">NSE</span><span class="m-status closed">CLOSED</span><span class="m-time">02:29 IST</span></span><span class="market-pill"><span class="m-dot dot-red"></span><span class="m-exch">NYSE</span><span class="m-status closed">CLOSED</span><span class="m-time">16:59 EDT</span></span>
+  <div class="strip-left"><span class="market-pill"><span class="m-dot dot-red"></span><span class="m-exch">NSE</span><span class="m-status closed">CLOSED</span><span class="m-time">03:24 IST</span></span><span class="market-pill"><span class="m-dot dot-red"></span><span class="m-exch">NYSE</span><span class="m-status closed">CLOSED</span><span class="m-time">17:54 EDT</span></span>
     <span class="strip-sep">·</span>
     <span>RBI Repo: <strong style="color:var(--amber)">6.25%</strong></span>
     <span class="strip-sep">·</span>
@@ -362,12 +453,12 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
     <li><button onclick="showSection('profile')">Profile</button></li>
     <li><button onclick="showSection('dashboard')">Dashboard</button></li>
   </ul>
-  <div class="nav-badge"><span class="live-dot"></span>LIVE &middot; 28 Apr 2026 20:59 UTC</div>
+  <div class="nav-badge"><span class="live-dot"></span>LIVE &middot; 28 Apr 2026 21:54 UTC</div>
 </nav>
 
 <!-- Ticker -->
 <div class="ticker-strip">
-  <div class="ticker-inner"><span class="tick"><span class="tick-sym">BTC</span><span class="tick-price">$76,444</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.70%</span></span><span class="tick"><span class="tick-sym">ETH</span><span class="tick-price">$2,296</span><span class="tick-sep">|</span><span class="tick-chg chg-up">▲ 0.16%</span></span><span class="tick"><span class="tick-sym">GOLD</span><span class="tick-price">$4,591/oz</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 1.72%</span></span><span class="tick"><span class="tick-sym">SILVER</span><span class="tick-price">$73.54/oz</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 1.95%</span></span><span class="tick"><span class="tick-sym">NIFTY 50</span><span class="tick-price">24,093</span><span class="tick-sep">|</span><span class="tick-chg chg-up">▲ 0.81%</span></span><span class="tick"><span class="tick-sym">S&amp;P 500</span><span class="tick-price">7,139</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.49%</span></span><span class="tick"><span class="tick-sym">NASDAQ</span><span class="tick-price">24,664</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.90%</span></span><span class="tick"><span class="tick-sym">VIX</span><span class="tick-price chg-up">17.8</span><span class="tick-sep">|</span><span class="tick-chg" style="color:var(--text2)">NORMAL</span></span><span class="tick"><span class="tick-sym">INDIA VIX</span><span class="tick-price chg-up">18.4</span><span class="tick-sep">|</span><span class="tick-chg" style="color:var(--text2)">NORMAL</span></span><span class="tick"><span class="tick-sym">F&amp;G INDEX</span><span class="tick-price chg-up">33/100</span><span class="tick-sep">|</span><span class="tick-chg" style="color:var(--text2)">FEAR</span></span><span class="tick"><span class="tick-sym">WBTC</span><span class="tick-price">$76,218</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.65%</span></span><span class="tick"><span class="tick-sym">stETH</span><span class="tick-price">$2,290</span><span class="tick-sep">|</span><span class="tick-chg chg-up">▲ 0.12%</span></span><span class="tick"><span class="tick-sym">BTC</span><span class="tick-price">$76,444</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.70%</span></span><span class="tick"><span class="tick-sym">ETH</span><span class="tick-price">$2,296</span><span class="tick-sep">|</span><span class="tick-chg chg-up">▲ 0.16%</span></span><span class="tick"><span class="tick-sym">GOLD</span><span class="tick-price">$4,591/oz</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 1.72%</span></span><span class="tick"><span class="tick-sym">SILVER</span><span class="tick-price">$73.54/oz</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 1.95%</span></span><span class="tick"><span class="tick-sym">NIFTY 50</span><span class="tick-price">24,093</span><span class="tick-sep">|</span><span class="tick-chg chg-up">▲ 0.81%</span></span><span class="tick"><span class="tick-sym">S&amp;P 500</span><span class="tick-price">7,139</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.49%</span></span><span class="tick"><span class="tick-sym">NASDAQ</span><span class="tick-price">24,664</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.90%</span></span><span class="tick"><span class="tick-sym">VIX</span><span class="tick-price chg-up">17.8</span><span class="tick-sep">|</span><span class="tick-chg" style="color:var(--text2)">NORMAL</span></span><span class="tick"><span class="tick-sym">INDIA VIX</span><span class="tick-price chg-up">18.4</span><span class="tick-sep">|</span><span class="tick-chg" style="color:var(--text2)">NORMAL</span></span><span class="tick"><span class="tick-sym">F&amp;G INDEX</span><span class="tick-price chg-up">33/100</span><span class="tick-sep">|</span><span class="tick-chg" style="color:var(--text2)">FEAR</span></span><span class="tick"><span class="tick-sym">WBTC</span><span class="tick-price">$76,218</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.65%</span></span><span class="tick"><span class="tick-sym">stETH</span><span class="tick-price">$2,290</span><span class="tick-sep">|</span><span class="tick-chg chg-up">▲ 0.12%</span></span></div>
+  <div class="ticker-inner"><span class="tick"><span class="tick-sym">BTC</span><span class="tick-price">$76,308</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.74%</span></span><span class="tick"><span class="tick-sym">ETH</span><span class="tick-price">$2,288</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.09%</span></span><span class="tick"><span class="tick-sym">GOLD</span><span class="tick-price">$4,592/oz</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 1.75%</span></span><span class="tick"><span class="tick-sym">SILVER</span><span class="tick-price">$73.55/oz</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 1.94%</span></span><span class="tick"><span class="tick-sym">NIFTY 50</span><span class="tick-price">24,093</span><span class="tick-sep">|</span><span class="tick-chg chg-up">▲ 0.81%</span></span><span class="tick"><span class="tick-sym">S&amp;P 500</span><span class="tick-price">7,139</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.49%</span></span><span class="tick"><span class="tick-sym">NASDAQ</span><span class="tick-price">24,664</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.90%</span></span><span class="tick"><span class="tick-sym">VIX</span><span class="tick-price chg-up">17.8</span><span class="tick-sep">|</span><span class="tick-chg" style="color:var(--text2)">NORMAL</span></span><span class="tick"><span class="tick-sym">INDIA VIX</span><span class="tick-price chg-dn">18.4</span><span class="tick-sep">|</span><span class="tick-chg" style="color:var(--text2)">ELEVATED</span></span><span class="tick"><span class="tick-sym">F&amp;G INDEX</span><span class="tick-price chg-up">33/100</span><span class="tick-sep">|</span><span class="tick-chg" style="color:var(--text2)">FEAR</span></span><span class="tick"><span class="tick-sym">WBTC</span><span class="tick-price">$76,135</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.71%</span></span><span class="tick"><span class="tick-sym">stETH</span><span class="tick-price">$2,282</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.13%</span></span><span class="tick"><span class="tick-sym">BTC</span><span class="tick-price">$76,308</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.74%</span></span><span class="tick"><span class="tick-sym">ETH</span><span class="tick-price">$2,288</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.09%</span></span><span class="tick"><span class="tick-sym">GOLD</span><span class="tick-price">$4,592/oz</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 1.75%</span></span><span class="tick"><span class="tick-sym">SILVER</span><span class="tick-price">$73.55/oz</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 1.94%</span></span><span class="tick"><span class="tick-sym">NIFTY 50</span><span class="tick-price">24,093</span><span class="tick-sep">|</span><span class="tick-chg chg-up">▲ 0.81%</span></span><span class="tick"><span class="tick-sym">S&amp;P 500</span><span class="tick-price">7,139</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.49%</span></span><span class="tick"><span class="tick-sym">NASDAQ</span><span class="tick-price">24,664</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.90%</span></span><span class="tick"><span class="tick-sym">VIX</span><span class="tick-price chg-up">17.8</span><span class="tick-sep">|</span><span class="tick-chg" style="color:var(--text2)">NORMAL</span></span><span class="tick"><span class="tick-sym">INDIA VIX</span><span class="tick-price chg-dn">18.4</span><span class="tick-sep">|</span><span class="tick-chg" style="color:var(--text2)">ELEVATED</span></span><span class="tick"><span class="tick-sym">F&amp;G INDEX</span><span class="tick-price chg-up">33/100</span><span class="tick-sep">|</span><span class="tick-chg" style="color:var(--text2)">FEAR</span></span><span class="tick"><span class="tick-sym">WBTC</span><span class="tick-price">$76,135</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.71%</span></span><span class="tick"><span class="tick-sym">stETH</span><span class="tick-price">$2,282</span><span class="tick-sep">|</span><span class="tick-chg chg-dn">▼ 0.13%</span></span></div>
 </div>
 
 <div class="page">
@@ -379,14 +470,14 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
       <div class="section-title">Overview &mdash; Market Signals</div>
       <div class="section-subtitle">Financial Intelligence Platform</div>
     </div>
-    <div class="section-meta">Updated 28 Apr 2026 20:59 UTC &middot; GitHub Actions</div>
+    <div class="section-meta">Updated 28 Apr 2026 21:54 UTC &middot; GitHub Actions</div>
   </div>
   <div class="home-grid">
     <!-- Sidebar -->
     <div class="sidebar">
       <div class="sidebar-group">
         <div class="sidebar-group-label">Asset Signals</div>
-        <div class="sidebar-item js-sig-item" data-asset="gold" onclick="selectSignal('gold')"><div class="sidebar-item-left"><span class="sidebar-item-name">Gold / PAXG</span><span class="sidebar-item-desc">CoinGecko (PAXG proxy)</span></div><span class="signal-badge badge-hold">HOLD</span></div><div class="sidebar-item js-sig-item" data-asset="silver" onclick="selectSignal('silver')"><div class="sidebar-item-left"><span class="sidebar-item-name">Silver (SI=F)</span><span class="sidebar-item-desc">Yahoo Finance (SI=F silver futures)</span></div><span class="signal-badge badge-hold">HOLD</span></div><div class="sidebar-item js-sig-item" data-asset="crypto" onclick="selectSignal('crypto')"><div class="sidebar-item-left"><span class="sidebar-item-name">Crypto · BTC / ETH</span><span class="sidebar-item-desc">CoinGecko + alternative.me</span></div><span class="signal-badge badge-hold">HOLD</span></div><div class="sidebar-item js-sig-item" data-asset="stocks" onclick="selectSignal('stocks')"><div class="sidebar-item-left"><span class="sidebar-item-name">Indian Equities</span><span class="sidebar-item-desc">Yahoo Finance via yfinance</span></div><span class="signal-badge badge-hold">HOLD</span></div><div class="sidebar-item js-sig-item" data-asset="usstocks" onclick="selectSignal('usstocks')"><div class="sidebar-item-left"><span class="sidebar-item-name">US Markets · S&amp;P</span><span class="sidebar-item-desc">Yahoo Finance + alternative.me Fear & Greed</span></div><span class="signal-badge badge-wait">WAIT</span></div><div class="sidebar-item js-sig-item" data-asset="property" onclick="selectSignal('property')"><div class="sidebar-item-left"><span class="sidebar-item-name">Real Estate</span><span class="sidebar-item-desc">RBI rate cycle analysis. Repo rate: 6.25%</span></div><span class="signal-badge badge-buy">BUY</span></div><div class="sidebar-item js-sig-item" data-asset="fd" onclick="selectSignal('fd')"><div class="sidebar-item-left"><span class="sidebar-item-name">Fixed Deposits</span><span class="sidebar-item-desc">Public bank disclosures + RBI policy</span></div><span class="signal-badge badge-buy">BUY</span></div>
+        <div class="sidebar-item js-sig-item" data-asset="gold" onclick="selectSignal('gold')"><div class="sidebar-item-left"><span class="sidebar-item-name">Gold / PAXG</span><span class="sidebar-item-desc">CoinGecko (PAXG proxy)</span></div><span class="signal-badge badge-hold">HOLD</span></div><div class="sidebar-item js-sig-item" data-asset="silver" onclick="selectSignal('silver')"><div class="sidebar-item-left"><span class="sidebar-item-name">Silver (SI=F)</span><span class="sidebar-item-desc">Yahoo Finance (SI=F silver futures)</span></div><span class="signal-badge badge-hold">HOLD</span></div><div class="sidebar-item js-sig-item" data-asset="crypto" onclick="selectSignal('crypto')"><div class="sidebar-item-left"><span class="sidebar-item-name">Crypto · BTC / ETH</span><span class="sidebar-item-desc">CoinGecko + alternative.me</span></div><span class="signal-badge badge-hold">HOLD</span></div><div class="sidebar-item js-sig-item" data-asset="stocks" onclick="selectSignal('stocks')"><div class="sidebar-item-left"><span class="sidebar-item-name">Indian Equities</span><span class="sidebar-item-desc">Yahoo Finance via yfinance</span></div><span class="signal-badge badge-hold">HOLD</span></div><div class="sidebar-item js-sig-item" data-asset="usstocks" onclick="selectSignal('usstocks')"><div class="sidebar-item-left"><span class="sidebar-item-name">US Markets · S&amp;P</span><span class="sidebar-item-desc">Yahoo Finance + alternative.me Fear & Greed</span></div><span class="signal-badge badge-hold">HOLD</span></div><div class="sidebar-item js-sig-item" data-asset="property" onclick="selectSignal('property')"><div class="sidebar-item-left"><span class="sidebar-item-name">Real Estate</span><span class="sidebar-item-desc">RBI rate cycle analysis. Repo rate: 6.25%</span></div><span class="signal-badge badge-buy">BUY</span></div><div class="sidebar-item js-sig-item" data-asset="fd" onclick="selectSignal('fd')"><div class="sidebar-item-left"><span class="sidebar-item-name">Fixed Deposits</span><span class="sidebar-item-desc">Public bank disclosures + RBI policy</span></div><span class="signal-badge badge-buy">BUY</span></div>
       </div>
       <div class="sidebar-group">
         <div class="sidebar-group-label">Tools</div>
@@ -453,7 +544,7 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
       </div>
       <!-- Signal detail panels (one per asset, shown/hidden by JS) -->
       <div class="signal-area">
-        <div class="signal-detail-panel" id="det-gold"><div class="detail-header"><div class="detail-title">Gold / PAXG</div><span class="signal-badge badge-hold detail-signal-large">HOLD</span></div><div class="detail-metrics"><div class="detail-metric"><div class="detail-metric-val">$4,591.44</div><div class="detail-metric-label">USD Price</div></div><div class="detail-metric"><div class="detail-metric-val">₹4.35 L</div><div class="detail-metric-label">INR Price</div></div><div class="detail-metric"><div class="detail-metric-val">-1.72%</div><div class="detail-metric-label">24h Change</div></div><div class="detail-metric"><div class="detail-metric-val">+1.67%</div><div class="detail-metric-label">30d Change</div></div><div class="detail-metric"><div class="detail-metric-val">18.3% below</div><div class="detail-metric-label">vs ATH</div></div></div><div class="reasons-panel"><div class="reasons-label">Signal Rationale</div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>Gold 18.3% below ATH — fair-value zone</span></div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>Hold existing; accumulate gradually on dips</span></div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>24h dip -1.72% — short-term opportunity</span></div></div><div class="context-note"><strong style="color:var(--blue)">Pro Tip:</strong> SGB offers 2.5% annual interest on top of gold returns — best option for Indian investors.</div><div class="disclaimer">Data source: CoinGecko (PAXG proxy) · Educational only — not investment advice. Past performance is not indicative of future results.</div></div><div class="signal-detail-panel" id="det-silver"><div class="detail-header"><div class="detail-title">Silver (SI=F futures)</div><span class="signal-badge badge-hold detail-signal-large">HOLD</span></div><div class="detail-metrics"><div class="detail-metric"><div class="detail-metric-val">$73.54  (-1.95% today)</div><div class="detail-metric-label">Silver (USD/oz)</div></div><div class="detail-metric"><div class="detail-metric-val">$78.38  (below)</div><div class="detail-metric-label">50-Day MA</div></div><div class="detail-metric"><div class="detail-metric-val">35.5% below</div><div class="detail-metric-label">vs 3-Month High</div></div><div class="detail-metric"><div class="detail-metric-val">Yahoo Finance SI=F (silver futures)</div><div class="detail-metric-label">Source</div></div></div><div class="reasons-panel"><div class="reasons-label">Signal Rationale</div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>Silver 35.5% below recent high — gradual accumulation zone</span></div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>Silver is 2–3× more volatile than gold — keep position sizing smaller</span></div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>Below 50-day MA — wait for stabilization or buy in tranches</span></div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>For India: Nippon India Silver ETF or ICICI Prudential Silver ETF on NSE</span></div></div><div class="context-note"><strong style="color:var(--blue)">Pro Tip:</strong> No SGB for silver — use Silver ETFs on NSE for tax-efficient paper exposure.</div><div class="disclaimer">Data source: Yahoo Finance (SI=F silver futures) · Educational only — not investment advice. Past performance is not indicative of future results.</div></div><div class="signal-detail-panel" id="det-crypto"><div class="detail-header"><div class="detail-title">Crypto · BTC / ETH / DeFi</div><span class="signal-badge badge-hold detail-signal-large">HOLD</span></div><div class="detail-metrics"><div class="detail-metric"><div class="detail-metric-val">$76,444.00  (-0.70% 24h)</div><div class="detail-metric-label">Bitcoin (BTC)</div></div><div class="detail-metric"><div class="detail-metric-val">$2,295.67  (+0.16% 24h)</div><div class="detail-metric-label">Ethereum (ETH)</div></div><div class="detail-metric"><div class="detail-metric-val">$76,218.00  (-0.65% 24h)</div><div class="detail-metric-label">Wrapped BTC (DeFi)</div></div><div class="detail-metric"><div class="detail-metric-val">$2,289.70  (+0.12% 24h)</div><div class="detail-metric-label">Staked ETH (stETH)</div></div><div class="detail-metric"><div class="detail-metric-val">$1531B</div><div class="detail-metric-label">BTC Market Cap</div></div><div class="detail-metric"><div class="detail-metric-val">33/100 — Fear</div><div class="detail-metric-label">Fear & Greed</div></div></div><div class="sparkline-wrap"><div class="spark-label">Fear &amp; Greed — 8-day trend</div><svg viewBox="0 0 280 44" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:44px;margin-top:4px;"><polyline points="0.0,33.5 40.0,35.8 80.0,4.2 120.0,20.0 160.0,38.0 200.0,33.5 240.0,2.0 280.0,33.5" fill="none" stroke="#00c07f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="reasons-panel"><div class="reasons-label">Signal Rationale</div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>Fear & Greed = 33/100 (Fear) — neutral zone. Continue DCA.</span></div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>Only invest what you can afford to lose — crypto is highly volatile</span></div></div><div class="context-note"><strong style="color:var(--blue)">Pro Tip:</strong> Never put more than 5–10% of portfolio in crypto. It's speculation, not investment.</div><div class="disclaimer">Data source: CoinGecko + alternative.me · Educational only — not investment advice. Past performance is not indicative of future results.</div></div><div class="signal-detail-panel" id="det-stocks"><div class="detail-header"><div class="detail-title">Indian Equities · Nifty 50</div><span class="signal-badge badge-hold detail-signal-large">HOLD</span></div><div class="detail-metrics"><div class="detail-metric"><div class="detail-metric-val">24,093  (+0.81% today)</div><div class="detail-metric-label">Nifty 50</div></div><div class="detail-metric"><div class="detail-metric-val">23,694  (above)</div><div class="detail-metric-label">20-Day MA</div></div><div class="detail-metric"><div class="detail-metric-val">24,248  (below)</div><div class="detail-metric-label">50-Day MA</div></div><div class="detail-metric"><div class="detail-metric-val">25,122  (below)</div><div class="detail-metric-label">200-Day MA</div></div><div class="detail-metric"><div class="detail-metric-val">66.5  (Neutral)</div><div class="detail-metric-label">RSI (14)</div></div><div class="detail-metric"><div class="detail-metric-val">18.4  (Normal)</div><div class="detail-metric-label">India VIX</div></div></div><div class="reasons-panel"><div class="reasons-label">Signal Rationale</div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>Mixed MA signals — wait for clear breakout above 50-day MA</span></div></div><div class="context-note"><strong style="color:var(--blue)">Pro Tip:</strong> Time in market beats timing the market. 5+ year horizon? Any dip is a buying opportunity.</div><div class="disclaimer">Data source: Yahoo Finance via yfinance · Educational only — not investment advice. Past performance is not indicative of future results.</div></div><div class="signal-detail-panel" id="det-usstocks"><div class="detail-header"><div class="detail-title">US Markets · S&P 500</div><span class="signal-badge badge-wait detail-signal-large">WAIT</span></div><div class="detail-metrics"><div class="detail-metric"><div class="detail-metric-val">7,139  (-0.49% today)</div><div class="detail-metric-label">S&P 500</div></div><div class="detail-metric"><div class="detail-metric-val">24,664</div><div class="detail-metric-label">NASDAQ</div></div><div class="detail-metric"><div class="detail-metric-val">6,802  (above)</div><div class="detail-metric-label">S&P 50-Day MA</div></div><div class="detail-metric"><div class="detail-metric-val">6,714  (above)</div><div class="detail-metric-label">S&P 200-Day MA</div></div><div class="detail-metric"><div class="detail-metric-val">78.5</div><div class="detail-metric-label">RSI (14)</div></div><div class="detail-metric"><div class="detail-metric-val">33/100 — Fear</div><div class="detail-metric-label">Fear & Greed</div></div><div class="detail-metric"><div class="detail-metric-val">17.8  (Normal)</div><div class="detail-metric-label">CBOE VIX</div></div></div><div class="reasons-panel"><div class="reasons-label">Signal Rationale</div><div class="reason-line"><span class="reason-marker rm-wait">›</span><span>Overbought: RSI=78, Fear & Greed=33/100</span></div><div class="reason-line"><span class="reason-marker rm-wait">›</span><span>Hold existing index funds; avoid new lump-sum entries</span></div><div class="reason-line"><span class="reason-marker rm-wait">›</span><span>For INR investors: Factor in USD/INR currency risk. Aim for 20–30% global allocation.</span></div></div><div class="context-note"><strong style="color:var(--blue)">Pro Tip:</strong> For US-based investors: S&P 500 index funds (VOO, FXAIX) are the gold standard for long-term wealth.</div><div class="disclaimer">Data source: Yahoo Finance + alternative.me Fear & Greed · Educational only — not investment advice. Past performance is not indicative of future results.</div></div><div class="signal-detail-panel" id="det-property"><div class="detail-header"><div class="detail-title">Real Estate</div><span class="signal-badge badge-buy detail-signal-large">BUY</span></div><div class="detail-metrics"><div class="detail-metric"><div class="detail-metric-val">6.25%  (CUTTING)</div><div class="detail-metric-label">RBI Repo Rate</div></div><div class="detail-metric"><div class="detail-metric-val">~8.5%</div><div class="detail-metric-label">Avg Home Loan</div></div><div class="detail-metric"><div class="detail-metric-val">7–10 years min</div><div class="detail-metric-label">Ideal Hold</div></div><div class="detail-metric"><div class="detail-metric-val">~3.0% (metro avg)</div><div class="detail-metric-label">Gross Rental Yield</div></div><div class="detail-metric"><div class="detail-metric-val">~2.70%</div><div class="detail-metric-label">Post-Tax Yield (10%)</div></div><div class="detail-metric"><div class="detail-metric-val">~2.10%</div><div class="detail-metric-label">Post-Tax Yield (30%)</div></div><div class="detail-metric"><div class="detail-metric-val">5–12%/yr (city-dependent)</div><div class="detail-metric-label">Appreciation</div></div></div><div class="reasons-panel"><div class="reasons-label">Signal Rationale</div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>RBI in rate-cutting cycle (repo 6.25%) — home loan EMIs falling</span></div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>Property demand typically rises 12–18 months after cuts begin</span></div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>Lock in a home loan now before banks pass on the full rate cuts</span></div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>Only buy if you plan to hold 7–10+ years</span></div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>REIT alternative: Mindspace/Brookfield (7–8% yield + liquidity)</span></div></div><div class="context-note"><strong style="color:var(--blue)">Pro Tip:</strong> Location beats timing in real estate. Buy right, not just cheap.</div><div class="disclaimer">Data source: RBI rate cycle analysis. Repo rate: 6.25% · Educational only — not investment advice. Past performance is not indicative of future results.</div></div><div class="signal-detail-panel" id="det-fd"><div class="detail-header"><div class="detail-title">Fixed Deposits</div><span class="signal-badge badge-buy detail-signal-large">BUY</span></div><div class="detail-metrics"><div class="detail-metric"><div class="detail-metric-val">~7.0–7.5% p.a.</div><div class="detail-metric-label">Big Bank FD</div></div><div class="detail-metric"><div class="detail-metric-val">~8.5–9.0%</div><div class="detail-metric-label">Small Finance Bank</div></div><div class="detail-metric"><div class="detail-metric-val">~7.35% (govt-backed)</div><div class="detail-metric-label">RBI Savings Bond</div></div><div class="detail-metric"><div class="detail-metric-val">~7–8% (tax-efficient post 3yr)</div><div class="detail-metric-label">Debt MF</div></div><div class="detail-metric"><div class="detail-metric-val">6.25% (cutting)</div><div class="detail-metric-label">Repo Rate</div></div><div class="detail-metric"><div class="detail-metric-val">~7.65% on SFB FD</div><div class="detail-metric-label">Post-Tax Yield (10%)</div></div><div class="detail-metric"><div class="detail-metric-val">~6.80% on SFB FD</div><div class="detail-metric-label">Post-Tax Yield (20%)</div></div><div class="detail-metric"><div class="detail-metric-val">~5.95% on SFB FD</div><div class="detail-metric-label">Post-Tax Yield (30%)</div></div></div><div class="reasons-panel"><div class="reasons-label">Signal Rationale</div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>RBI cutting rates → FD rates WILL fall in 6–12 months. Lock in NOW.</span></div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>Consider 3–5 year FDs before banks reduce rates</span></div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>Small Finance Banks: AU, ESAF, Jana — 8.5–9.0% (DICGC insured ₹5L)</span></div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>Avoid short-term FDs — renewals will be at lower rates</span></div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>FD income is taxable at slab rate — compare with debt MFs for post-tax returns</span></div></div><div class="context-note"><strong style="color:var(--blue)">Pro Tip:</strong> FDs are taxable — for high earners, tax-free bonds or PPF may give better post-tax returns.</div><div class="disclaimer">Data source: Public bank disclosures + RBI policy · Educational only — not investment advice. Past performance is not indicative of future results.</div></div>
+        <div class="signal-detail-panel" id="det-gold"><div class="detail-header"><div class="detail-title">Gold / PAXG</div><span class="signal-badge badge-hold detail-signal-large">HOLD</span></div><div class="detail-metrics"><div class="detail-metric"><div class="detail-metric-val">$4,592.00</div><div class="detail-metric-label">USD Price</div></div><div class="detail-metric"><div class="detail-metric-val">₹4.35 L</div><div class="detail-metric-label">INR Price</div></div><div class="detail-metric"><div class="detail-metric-val">-1.75%</div><div class="detail-metric-label">24h Change</div></div><div class="detail-metric"><div class="detail-metric-val">+1.74%</div><div class="detail-metric-label">30d Change</div></div><div class="detail-metric"><div class="detail-metric-val">18.3% below</div><div class="detail-metric-label">vs ATH</div></div></div><div class="reasons-panel"><div class="reasons-label">Signal Rationale</div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>Gold 18.3% below ATH — fair-value zone</span></div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>Hold existing; accumulate gradually on dips</span></div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>24h dip -1.75% — short-term opportunity</span></div></div><div class="context-note"><strong style="color:var(--blue)">Pro Tip:</strong> SGB offers 2.5% annual interest on top of gold returns — best option for Indian investors.</div><div class="disclaimer">Data source: CoinGecko (PAXG proxy) · Educational only — not investment advice. Past performance is not indicative of future results.</div></div><div class="signal-detail-panel" id="det-silver"><div class="detail-header"><div class="detail-title">Silver (SI=F futures)</div><span class="signal-badge badge-hold detail-signal-large">HOLD</span></div><div class="detail-metrics"><div class="detail-metric"><div class="detail-metric-val">$73.55  (-1.94% today)</div><div class="detail-metric-label">Silver (USD/oz)</div></div><div class="detail-metric"><div class="detail-metric-val">$78.38  (below)</div><div class="detail-metric-label">50-Day MA</div></div><div class="detail-metric"><div class="detail-metric-val">35.5% below</div><div class="detail-metric-label">vs 3-Month High</div></div><div class="detail-metric"><div class="detail-metric-val">62.7</div><div class="detail-metric-label">Gold/Silver Ratio</div></div><div class="detail-metric"><div class="detail-metric-val">Yahoo Finance SI=F (silver futures)</div><div class="detail-metric-label">Source</div></div></div><div class="reasons-panel"><div class="reasons-label">Signal Rationale</div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>Silver 35.5% below recent high — gradual accumulation zone</span></div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>Silver is 2–3× more volatile than gold — keep position sizing smaller</span></div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>Gold/Silver Ratio = 62.7 — within normal historical range (50–80)</span></div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>Below 50-day MA — wait for stabilization or buy in tranches</span></div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>For India: Nippon India Silver ETF or ICICI Prudential Silver ETF on NSE</span></div></div><div class="context-note"><strong style="color:var(--blue)">Pro Tip:</strong> No SGB for silver — use Silver ETFs on NSE for tax-efficient paper exposure.</div><div class="disclaimer">Data source: Yahoo Finance (SI=F silver futures) · Educational only — not investment advice. Past performance is not indicative of future results.</div></div><div class="signal-detail-panel" id="det-crypto"><div class="detail-header"><div class="detail-title">Crypto · BTC / ETH / DeFi</div><span class="signal-badge badge-hold detail-signal-large">HOLD</span></div><div class="detail-metrics"><div class="detail-metric"><div class="detail-metric-val">$76,308.00  (-0.74% 24h)</div><div class="detail-metric-label">Bitcoin (BTC)</div></div><div class="detail-metric"><div class="detail-metric-val">$2,287.54  (-0.09% 24h)</div><div class="detail-metric-label">Ethereum (ETH)</div></div><div class="detail-metric"><div class="detail-metric-val">$76,135.00  (-0.71% 24h)</div><div class="detail-metric-label">Wrapped BTC (DeFi)</div></div><div class="detail-metric"><div class="detail-metric-val">$2,282.30  (-0.13% 24h)</div><div class="detail-metric-label">Staked ETH (stETH)</div></div><div class="detail-metric"><div class="detail-metric-val">$1528B</div><div class="detail-metric-label">BTC Market Cap</div></div><div class="detail-metric"><div class="detail-metric-val">33/100 — Fear</div><div class="detail-metric-label">Fear & Greed</div></div></div><div class="sparkline-wrap"><div class="spark-label">Fear &amp; Greed — 8-day trend</div><svg viewBox="0 0 280 44" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:44px;margin-top:4px;"><polyline points="0.0,33.5 40.0,35.8 80.0,4.2 120.0,20.0 160.0,38.0 200.0,33.5 240.0,2.0 280.0,33.5" fill="none" stroke="#00c07f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="reasons-panel"><div class="reasons-label">Signal Rationale</div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>Fear & Greed = 33/100 (Fear) — neutral zone. Continue DCA.</span></div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>Only invest what you can afford to lose — crypto is highly volatile</span></div></div><div class="context-note"><strong style="color:var(--blue)">Pro Tip:</strong> Never put more than 5–10% of portfolio in crypto. It's speculation, not investment.</div><div class="disclaimer">Data source: CoinGecko + alternative.me · Educational only — not investment advice. Past performance is not indicative of future results.</div></div><div class="signal-detail-panel" id="det-stocks"><div class="detail-header"><div class="detail-title">Indian Equities · Nifty 50</div><span class="signal-badge badge-hold detail-signal-large">HOLD</span></div><div class="detail-metrics"><div class="detail-metric"><div class="detail-metric-val">24,093  (+0.81% today)</div><div class="detail-metric-label">Nifty 50</div></div><div class="detail-metric"><div class="detail-metric-val">23,694  (above)</div><div class="detail-metric-label">20-Day MA</div></div><div class="detail-metric"><div class="detail-metric-val">24,248  (below)</div><div class="detail-metric-label">50-Day MA</div></div><div class="detail-metric"><div class="detail-metric-val">25,122  (below)</div><div class="detail-metric-label">200-Day MA</div></div><div class="detail-metric"><div class="detail-metric-val">52.0  (Neutral)</div><div class="detail-metric-label">RSI (14)</div></div><div class="detail-metric"><div class="detail-metric-val">88.9  (signal 2.5)</div><div class="detail-metric-label">MACD</div></div><div class="detail-metric"><div class="detail-metric-val">18.4  (High)</div><div class="detail-metric-label">India VIX</div></div></div><div class="reasons-panel"><div class="reasons-label">Signal Rationale</div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>Mixed MA signals — wait for clear breakout above 50-day MA</span></div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>India VIX = 18.4 (elevated) — widen entry zones, use tranches not lump-sum</span></div></div><div class="context-note"><strong style="color:var(--blue)">Pro Tip:</strong> Time in market beats timing the market. 5+ year horizon? Any dip is a buying opportunity.</div><div class="disclaimer">Data source: Yahoo Finance via yfinance · Educational only — not investment advice. Past performance is not indicative of future results.</div></div><div class="signal-detail-panel" id="det-usstocks"><div class="detail-header"><div class="detail-title">US Markets · S&P 500</div><span class="signal-badge badge-hold detail-signal-large">HOLD</span></div><div class="detail-metrics"><div class="detail-metric"><div class="detail-metric-val">7,139  (-0.49% today)</div><div class="detail-metric-label">S&P 500</div></div><div class="detail-metric"><div class="detail-metric-val">24,664</div><div class="detail-metric-label">NASDAQ</div></div><div class="detail-metric"><div class="detail-metric-val">6,802  (above)</div><div class="detail-metric-label">S&P 50-Day MA</div></div><div class="detail-metric"><div class="detail-metric-val">6,714  (above)</div><div class="detail-metric-label">S&P 200-Day MA</div></div><div class="detail-metric"><div class="detail-metric-val">66.9</div><div class="detail-metric-label">RSI (14)</div></div><div class="detail-metric"><div class="detail-metric-val">126.3  (signal 100.4)</div><div class="detail-metric-label">MACD</div></div><div class="detail-metric"><div class="detail-metric-val">33/100 — Fear</div><div class="detail-metric-label">Fear & Greed</div></div><div class="detail-metric"><div class="detail-metric-val">17.8  (Normal)</div><div class="detail-metric-label">CBOE VIX</div></div></div><div class="reasons-panel"><div class="reasons-label">Signal Rationale</div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>S&P 500 above 50-day MA (6,802) — uptrend intact</span></div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>Continue regular DCA. Don't time the market.</span></div><div class="reason-line"><span class="reason-marker rm-hold">›</span><span>For INR investors: Factor in USD/INR currency risk. Aim for 20–30% global allocation.</span></div></div><div class="context-note"><strong style="color:var(--blue)">Pro Tip:</strong> For US-based investors: S&P 500 index funds (VOO, FXAIX) are the gold standard for long-term wealth.</div><div class="disclaimer">Data source: Yahoo Finance + alternative.me Fear & Greed · Educational only — not investment advice. Past performance is not indicative of future results.</div></div><div class="signal-detail-panel" id="det-property"><div class="detail-header"><div class="detail-title">Real Estate</div><span class="signal-badge badge-buy detail-signal-large">BUY</span></div><div class="detail-metrics"><div class="detail-metric"><div class="detail-metric-val">6.25%  (CUTTING)</div><div class="detail-metric-label">RBI Repo Rate</div></div><div class="detail-metric"><div class="detail-metric-val">~8.5%</div><div class="detail-metric-label">Avg Home Loan</div></div><div class="detail-metric"><div class="detail-metric-val">7–10 years min</div><div class="detail-metric-label">Ideal Hold</div></div><div class="detail-metric"><div class="detail-metric-val">~3.0% (metro avg)</div><div class="detail-metric-label">Gross Rental Yield</div></div><div class="detail-metric"><div class="detail-metric-val">~1.85% (after 12% maintenance + Sec 24)</div><div class="detail-metric-label">Net Taxable Yield</div></div><div class="detail-metric"><div class="detail-metric-val">~2.82%</div><div class="detail-metric-label">Post-Tax Yield (10% slab)</div></div><div class="detail-metric"><div class="detail-metric-val">~2.45%</div><div class="detail-metric-label">Post-Tax Yield (30% slab)</div></div><div class="detail-metric"><div class="detail-metric-val">5–12%/yr (city-dependent)</div><div class="detail-metric-label">Appreciation</div></div></div><div class="reasons-panel"><div class="reasons-label">Signal Rationale</div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>RBI in rate-cutting cycle (repo 6.25%) — home loan EMIs falling</span></div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>Property demand typically rises 12–18 months after cuts begin</span></div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>Lock in a home loan now before banks pass on the full rate cuts</span></div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>Only buy if you plan to hold 7–10+ years</span></div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>REIT alternative: Mindspace/Brookfield (7–8% yield + liquidity)</span></div></div><div class="context-note"><strong style="color:var(--blue)">Pro Tip:</strong> Location beats timing in real estate. Buy right, not just cheap.</div><div class="disclaimer">Data source: RBI rate cycle analysis. Repo rate: 6.25% · Educational only — not investment advice. Past performance is not indicative of future results.</div></div><div class="signal-detail-panel" id="det-fd"><div class="detail-header"><div class="detail-title">Fixed Deposits</div><span class="signal-badge badge-buy detail-signal-large">BUY</span></div><div class="detail-metrics"><div class="detail-metric"><div class="detail-metric-val">~7.0–7.5% p.a.</div><div class="detail-metric-label">Big Bank FD</div></div><div class="detail-metric"><div class="detail-metric-val">~8.5–9.0%</div><div class="detail-metric-label">Small Finance Bank</div></div><div class="detail-metric"><div class="detail-metric-val">~7.35% (govt-backed)</div><div class="detail-metric-label">RBI Savings Bond</div></div><div class="detail-metric"><div class="detail-metric-val">~7–8% (taxed at slab rate — indexation removed)</div><div class="detail-metric-label">Debt MF (post Apr 2023)</div></div><div class="detail-metric"><div class="detail-metric-val">6.25% (cutting)</div><div class="detail-metric-label">Repo Rate</div></div><div class="detail-metric"><div class="detail-metric-val">~3.5% (FD rate − 5% inflation)</div><div class="detail-metric-label">Real Rate of Return</div></div><div class="detail-metric"><div class="detail-metric-val">~7.65% on SFB FD</div><div class="detail-metric-label">Post-Tax Yield (10%)</div></div><div class="detail-metric"><div class="detail-metric-val">~6.80% on SFB FD</div><div class="detail-metric-label">Post-Tax Yield (20%)</div></div><div class="detail-metric"><div class="detail-metric-val">~5.95% on SFB FD</div><div class="detail-metric-label">Post-Tax Yield (30%)</div></div></div><div class="reasons-panel"><div class="reasons-label">Signal Rationale</div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>RBI cutting rates → FD rates WILL fall in 6–12 months. Lock in NOW.</span></div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>Consider 3–5 year FDs before banks reduce rates</span></div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>Small Finance Banks: AU, ESAF, Jana — 8.5–9.0% (DICGC insured ₹5L)</span></div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>Avoid short-term FDs — renewals will be at lower rates</span></div><div class="reason-line"><span class="reason-marker rm-buy">›</span><span>FD income is taxable at slab rate — compare with debt MFs for post-tax returns</span></div></div><div class="context-note"><strong style="color:var(--blue)">Pro Tip:</strong> FDs are taxable — for high earners, tax-free bonds or PPF may give better post-tax returns. Note: Debt MFs purchased after April 1, 2023 are taxed at slab rates (indexation benefit removed), making them similar to FDs for tax purposes.</div><div class="disclaimer">Data source: Public bank disclosures + RBI policy · Educational only — not investment advice. Past performance is not indicative of future results.</div></div>
       </div>
     </div>
   </div>
@@ -474,6 +565,7 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
       <button class="calc-tab" onclick="switchTab(this,'invest','lump')">Lump Sum</button>
       <button class="calc-tab" onclick="switchTab(this,'invest','goal')">Goal Planner</button>
       <button class="calc-tab" onclick="switchTab(this,'invest','roi')">ROI Analyzer</button>
+      <button class="calc-tab" onclick="switchTab(this,'invest','scenario')">Scenario Engine</button>
     </div>
     <!-- SIP -->
     <div id="invest-sip" class="calc-inner active">
@@ -495,6 +587,12 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
         <button class="calc-btn" onclick="calcSIP()">Calculate</button>
       </div>
       <div class="calc-outputs">
+        <div class="summary-bar" id="sipSummaryBar">
+          <div class="sum-cell"><div class="sum-label">Corpus</div><div class="sum-value green" id="sb-sipCorpus">—</div><div class="sum-action" id="sb-sipAction">Enter values to calculate</div></div>
+          <div class="sum-cell"><div class="sum-label">Wealth Multiple</div><div class="sum-value blue" id="sb-sipMultiple">—</div></div>
+          <div class="sum-cell"><div class="sum-label">Total Invested</div><div class="sum-value" id="sb-sipInvested">—</div></div>
+          <div class="sum-cell"><div class="sum-label">Wealth Gained</div><div class="sum-value green" id="sb-sipGain">—</div></div>
+        </div>
         <div class="output-grid">
           <div class="output-cell full-col">
             <div class="output-label">Projected Corpus</div>
@@ -645,6 +743,22 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
         <div id="roiResult"></div>
       </div>
     </div>
+    <!-- Scenario Engine -->
+    <div id="invest-scenario" class="calc-inner">
+      <div class="calc-inputs">
+        <div class="form-group"><label class="form-label">Monthly SIP (₹)</label><input class="form-input" type="number" id="scSIP" value="15000" oninput="calcScenario()"></div>
+        <div class="form-group"><label class="form-label">Investment Period (years)</label><input class="form-input" type="number" id="scYrs" value="20" oninput="calcScenario()"></div>
+        <div class="form-group"><label class="form-label">Base Return Rate (%)</label><input class="form-input" type="number" id="scBase" value="12" oninput="calcScenario()"></div>
+        <div class="form-group"><label class="form-label">Annual SIP Step-Up (%)</label><input class="form-input" type="number" id="scStepUp" value="10" oninput="calcScenario()"></div>
+        <div class="form-group"><label class="form-label">Inflation Shock (%)</label><input class="form-input" type="number" id="scInflation" value="8" oninput="calcScenario()"></div>
+        <div class="form-group"><label class="form-label">Market Crash Year</label><input class="form-input" type="number" id="scCrashYr" value="5" oninput="calcScenario()"></div>
+        <div class="form-group"><label class="form-label">Crash Depth (%)</label><input class="form-input" type="number" id="scCrashPct" value="40" oninput="calcScenario()"></div>
+        <button class="calc-btn" onclick="calcScenario()">Run All Scenarios</button>
+      </div>
+      <div class="calc-outputs">
+        <div id="scenarioResult"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -703,6 +817,12 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
         <button class="calc-btn" onclick="calcFIRE()">Calculate</button>
       </div>
       <div class="calc-outputs">
+        <div class="summary-bar">
+          <div class="sum-cell"><div class="sum-label">FIRE Number</div><div class="sum-value green" id="sb-fireNum">—</div><div class="sum-action" id="sb-fireAction">Corpus needed at retirement</div></div>
+          <div class="sum-cell"><div class="sum-label">Years to FIRE</div><div class="sum-value blue" id="sb-fireYrs">—</div></div>
+          <div class="sum-cell"><div class="sum-label">SIP Needed</div><div class="sum-value" id="sb-fireSIP">—</div></div>
+          <div class="sum-cell"><div class="sum-label">Status</div><div class="sum-value" id="sb-fireStatus">—</div></div>
+        </div>
         <div class="output-grid">
           <div class="output-cell full-col">
             <div class="output-label">FIRE Number</div>
@@ -858,6 +978,10 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
       </div>
       <div class="calc-outputs">
         <div id="portfolioResult"></div>
+        <div class="pie-wrap" id="portfolioPieWrap" style="display:none">
+          <div style="position:relative;width:220px;height:220px"><canvas id="portfolioPie" role="img" aria-label="Asset allocation pie chart"></canvas></div>
+          <div class="pie-legend" id="portfolioPieLegend"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -897,6 +1021,12 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
         <button class="calc-btn" onclick="calcEMI()">Calculate</button>
       </div>
       <div class="calc-outputs">
+        <div class="summary-bar">
+          <div class="sum-cell"><div class="sum-label">Monthly EMI</div><div class="sum-value" id="sb-emiEMI">—</div><div class="sum-action" id="sb-emiAction">Move to Prepayment tab to save interest</div></div>
+          <div class="sum-cell"><div class="sum-label">Total Interest</div><div class="sum-value red" id="sb-emiInterest">—</div></div>
+          <div class="sum-cell"><div class="sum-label">Total Payment</div><div class="sum-value" id="sb-emiTotal">—</div></div>
+          <div class="sum-cell"><div class="sum-label">Interest Ratio</div><div class="sum-value amber" id="sb-emiRatio">—</div></div>
+        </div>
         <div class="output-grid">
           <div class="output-cell full-col">
             <div class="output-label">Monthly EMI</div>
@@ -997,6 +1127,12 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
         <button class="calc-btn" onclick="calcTax()">Calculate</button>
       </div>
       <div class="calc-outputs">
+        <div class="summary-bar">
+          <div class="sum-cell"><div class="sum-label">Best Regime</div><div class="sum-value green" id="sb-taxRegime">—</div><div class="sum-action" id="sb-taxAction">—</div></div>
+          <div class="sum-cell"><div class="sum-label">Tax Saving</div><div class="sum-value green" id="sb-taxSaving">—</div></div>
+          <div class="sum-cell"><div class="sum-label">Old Regime Tax</div><div class="sum-value amber" id="sb-taxOld">—</div></div>
+          <div class="sum-cell"><div class="sum-label">New Regime Tax</div><div class="sum-value blue" id="sb-taxNew">—</div></div>
+        </div>
         <div id="taxResult"></div>
         <div style="font-size:10px;color:var(--muted);margin-top:.75rem;font-family:var(--mono)">FY 2024-25 &middot; Resident individual &middot; Verify with a CA</div>
       </div>
@@ -1145,12 +1281,26 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
 </footer>
 
 </div><!-- /page -->
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
 // ════════ UTILS ════════
 function fmtC(v){if(!v&&v!==0)return'—';if(v>=1e7)return'₹'+(v/1e7).toFixed(2)+' Cr';if(v>=1e5)return'₹'+(v/1e5).toFixed(2)+' L';return'₹'+Math.round(v).toLocaleString('en-IN')}
 function fmtINR(v){return'₹'+Math.round(v).toLocaleString('en-IN')}
 function pct(v,dp=2){return(v>=0?'+':'')+v.toFixed(dp)+'%'}
+// ── Number counter animation ──
+function animateNum(el,rawVal,fmt){
+  if(!el)return;
+  el.classList.remove('num-animated');
+  void el.offsetWidth;
+  el.classList.add('num-animated');
+  const start=performance.now(),dur=500,from=0;
+  function step(ts){
+    const p=Math.min((ts-start)/dur,1),ease=1-Math.pow(1-p,3);
+    el.textContent=fmt(from+(rawVal-from)*ease);
+    if(p<1)requestAnimationFrame(step);else el.textContent=fmt(rawVal);
+  }
+  requestAnimationFrame(step);
+}
 
 // ════════ NAV ════════
 function showSection(id){
@@ -1192,11 +1342,21 @@ function calcSIP(){
   const r=rate/100/12,n=yrs*12;
   const corpus=sip*(Math.pow(1+r,n)-1)/r*(1+r);
   const invested=sip*n,gain=corpus-invested;
+  const multiple=corpus/invested;
+  // summary bar + animated numbers
+  animateNum(document.getElementById('sb-sipCorpus'),corpus,fmtC);
+  animateNum(document.getElementById('sb-sipInvested'),invested,fmtC);
+  animateNum(document.getElementById('sb-sipGain'),gain,fmtC);
+  const sbMult=document.getElementById('sb-sipMultiple');
+  if(sbMult){sbMult.classList.remove('num-animated');void sbMult.offsetWidth;sbMult.classList.add('num-animated');sbMult.textContent=multiple.toFixed(2)+'x';}
+  const sbAct=document.getElementById('sb-sipAction');
+  if(sbAct)sbAct.textContent=multiple>=5?'Excellent compounding — stay invested!':multiple>=3?'Good growth — increase SIP yearly by 10%':'Consider increasing SIP or tenure';
+  // detail outputs
   document.getElementById('sipCorpus').textContent=fmtC(corpus);
   document.getElementById('sipCorpusSub').textContent='at '+rate+'% p.a. over '+yrs+' years';
   document.getElementById('sipInvested').textContent=fmtC(invested);
   document.getElementById('sipGain').textContent=fmtC(gain);
-  document.getElementById('sipMultiple').textContent=(corpus/invested).toFixed(2)+'x';
+  document.getElementById('sipMultiple').textContent=multiple.toFixed(2)+'x';
   document.getElementById('sipCagr').textContent=rate+'%';
   // Sensitivity
   const rates=[rate-4,rate-2,rate,rate+2,rate+4].filter(x=>x>0);
@@ -1288,6 +1448,12 @@ function calcFIRE(){
   const status=futureSaved>=fireNum;
   document.getElementById('fireResult').innerHTML='<div class="verdict '+(status?'good':'warning')+'"><strong>'+(status?'On Track':'Gap Alert')+'</strong> — '+(status?'Your current savings + SIP covers the FIRE number.':'You need '+fmtC(sipNeeded)+'/mo SIP to bridge the gap.')+'</div>';
   document.getElementById('firePathResult').innerHTML='<div class="scenario-list"><div class="scenario-row"><span class="scenario-label">Monthly expenses at retirement</span><span class="scenario-val">'+fmtC(inflExp)+'</span></div><div class="scenario-row"><span class="scenario-label">FIRE number ('+swr+'% SWR)</span><span class="scenario-val green">'+fmtC(fireNum)+'</span></div><div class="scenario-row"><span class="scenario-label">Current savings future value</span><span class="scenario-val">'+fmtC(futureSaved)+'</span></div><div class="scenario-row"><span class="scenario-label">Gap to bridge via SIP</span><span class="scenario-val '+(gap>0?'amber':'green')+'">'+fmtC(gap)+'</span></div></div>';
+  // summary bar
+  animateNum(document.getElementById('sb-fireNum'),fireNum,fmtC);
+  animateNum(document.getElementById('sb-fireSIP'),sipNeeded,fmtC);
+  const sbFY=document.getElementById('sb-fireYrs');if(sbFY){sbFY.classList.remove('num-animated');void sbFY.offsetWidth;sbFY.classList.add('num-animated');sbFY.textContent=yrs+' yrs';}
+  const sbFS=document.getElementById('sb-fireStatus');if(sbFS){sbFS.classList.remove('num-animated');void sbFS.offsetWidth;sbFS.classList.add('num-animated');sbFS.textContent=status?'On Track':'Gap Alert';sbFS.style.color=status?'var(--green)':'var(--amber)';}
+  const sbFA=document.getElementById('sb-fireAction');if(sbFA)sbFA.textContent=status?'You are on track — keep investing!':'Increase SIP by '+fmtC(sipNeeded)+'/mo to retire at '+retire;
 }
 
 // ════════ CORPUS ════════
@@ -1352,6 +1518,22 @@ function calcPortfolio(){
   const assets=[['Equity',eq,12,-30],['Debt/FD',debt,8,-2],['Gold',gold,10,-15],['Real Estate',re,10,-25],['Crypto',crypto,50,-60],['Cash',cash,3,-1]];
   const crashImpact=assets.reduce((s,[,v,,crash])=>s+v*crash/100,0);
   document.getElementById('portfolioResult').innerHTML='<div class="output-grid"><div class="output-cell full-col"><div class="output-label">Total Portfolio</div><div class="output-value big">'+fmtC(total)+'</div></div></div><div class="scenario-list" style="margin-top:.75rem">'+assets.filter(([,v])=>v>0).map(([label,v,exp,crash])=>'<div class="scenario-row"><span class="scenario-label">'+label+' ('+((v/total)*100).toFixed(0)+'%)</span><span style="font-family:var(--mono);font-size:11px"><span style="color:var(--green)">+'+exp+'%</span> / <span style="color:var(--red)">'+crash+'%</span></span></div>').join('')+'<div class="scenario-row" style="background:rgba(232,64,64,.05)"><span class="scenario-label" style="font-weight:700">30% crash impact</span><span class="scenario-val red">'+fmtC(crashImpact)+'</span></div></div>';
+  // Doughnut pie chart
+  const pieWrap=document.getElementById('portfolioPieWrap');
+  const activeAssets=assets.filter(([,v])=>v>0);
+  if(pieWrap&&activeAssets.length){
+    pieWrap.style.display='flex';
+    const COLORS=['#1a6bff','#00c07f','#e8a825','#e84040','#a259ff','#4ecdc4'];
+    const labels=activeAssets.map(([l])=>l),vals=activeAssets.map(([,v])=>v);
+    const canvas=document.getElementById('portfolioPie');
+    if(window._portfolioPieChart){window._portfolioPieChart.destroy();}
+    window._portfolioPieChart=new Chart(canvas,{
+      type:'doughnut',
+      data:{labels,datasets:[{data:vals,backgroundColor:COLORS.slice(0,labels.length),borderWidth:1,borderColor:'#05080f',hoverOffset:6}]},
+      options:{responsive:true,maintainAspectRatio:true,cutout:'62%',plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.label+': '+fmtC(ctx.raw)+' ('+(ctx.raw/total*100).toFixed(1)+'%)';}}}}},
+    });
+    document.getElementById('portfolioPieLegend').innerHTML=labels.map((l,i)=>'<div class="pie-legend-row"><span class="pie-dot" style="background:'+COLORS[i]+'"></span><span class="pie-legend-label">'+l+'</span><span class="pie-legend-val">'+((vals[i]/total)*100).toFixed(1)+'%</span></div>').join('');
+  }
 }
 
 // ════════ EMI ════════
@@ -1368,6 +1550,13 @@ function calcEMI(){
   document.getElementById('emiEMI').textContent=fmtINR(EMI);
   document.getElementById('emiInterest').textContent=fmtC(interest);
   document.getElementById('emiTotal').textContent=fmtC(totalPay);
+  // summary bar
+  animateNum(document.getElementById('sb-emiEMI'),EMI,fmtINR);
+  animateNum(document.getElementById('sb-emiInterest'),interest,fmtC);
+  animateNum(document.getElementById('sb-emiTotal'),totalPay,fmtC);
+  const ratio=interest/totalPay*100;
+  const sbR=document.getElementById('sb-emiRatio');if(sbR){sbR.classList.remove('num-animated');void sbR.offsetWidth;sbR.classList.add('num-animated');sbR.textContent=ratio.toFixed(0)+'% interest';}
+  const sbA=document.getElementById('sb-emiAction');if(sbA)sbA.textContent=ratio>60?'High interest burden — consider prepaying early':ratio>40?'Moderate burden — lump-sum prepay saves big':'Healthy loan structure';
   // Sensitivity
   const sensRates=[rAnn-1,rAnn-0.5,rAnn,rAnn+0.5,rAnn+1];
   document.getElementById('emiSensitivity').innerHTML=sensRates.filter(x=>x>0).map(rv=>{
@@ -1412,6 +1601,12 @@ function calcTax(){
   var oldCell='<div class="output-cell"><div class="output-label">'+oldLabel+'</div><div class="output-value '+oldValCls+'">'+fmtINR(oldTax)+'</div><div class="output-sub">Taxable: '+fmtC(oldTaxable)+'</div></div>';
   var newCell='<div class="output-cell"><div class="output-label">'+newLabel+'</div><div class="output-value '+newValCls+'">'+fmtINR(newTax)+'</div><div class="output-sub">Taxable: '+fmtC(newTaxable)+'</div></div>';
   document.getElementById('taxResult').innerHTML='<div class="output-grid">'+oldCell+newCell+'</div><div class="verdict good">Choose <strong>'+choiceLabel+'</strong> — saves '+fmtINR(saving)+'/year</div>';
+  // summary bar
+  const sbTR=document.getElementById('sb-taxRegime');if(sbTR){sbTR.classList.remove('num-animated');void sbTR.offsetWidth;sbTR.classList.add('num-animated');sbTR.textContent=choiceLabel;}
+  animateNum(document.getElementById('sb-taxSaving'),saving,fmtINR);
+  animateNum(document.getElementById('sb-taxOld'),oldTax,fmtINR);
+  animateNum(document.getElementById('sb-taxNew'),newTax,fmtINR);
+  const sbTA=document.getElementById('sb-taxAction');if(sbTA)sbTA.textContent='Saves '+fmtINR(saving)+' vs the other regime';
 }
 
 // ════════ CG ════════
@@ -1441,6 +1636,45 @@ function calcHealth(){
   let barsHtml='';
   Object.entries(scores).forEach(([name,s])=>{const color=s.val>=70?'var(--green)':s.val>=50?'var(--amber)':'var(--red)';barsHtml+=`<div class="progress-row"><div class="progress-header"><span>${name}</span><span style="color:${color};font-family:var(--mono)">${Math.round(s.val)}/100</span></div><div class="progress-bar"><div class="progress-fill" style="width:${s.val}%;background:${color}"></div></div><div class="progress-note">${s.tip} · ${s.ideal} · ${s.yours}</div></div>`;});
   document.getElementById('healthResult').innerHTML=`<div style="display:flex;align-items:center;gap:2rem;margin-bottom:1.5rem;flex-wrap:wrap"><div style="text-align:center"><div style="font-size:3.5rem;font-weight:900;font-family:var(--mono);color:${grade.c}">${grade.g}</div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">${grade.l}</div></div><div style="flex:1;min-width:200px"><div class="output-label">Overall Health Score</div><div style="font-size:2rem;font-weight:800;font-family:var(--mono);color:var(--text)">${totalScore}<span style="font-size:1rem;color:var(--muted)">/100</span></div><div class="progress-bar" style="height:5px;margin-top:.5rem"><div class="progress-fill" style="width:${totalScore}%;background:${grade.c}"></div></div></div></div>${barsHtml}`;
+}
+
+// ════════ SCENARIO ENGINE ════════
+function calcScenario(){
+  const sip=+document.getElementById('scSIP').value||15000;
+  const yrs=+document.getElementById('scYrs').value||20;
+  const base=+document.getElementById('scBase').value||12;
+  const stepUp=+document.getElementById('scStepUp').value||10;
+  const inflShock=+document.getElementById('scInflation').value||8;
+  const crashYr=+document.getElementById('scCrashYr').value||5;
+  const crashPct=+document.getElementById('scCrashPct').value||40;
+  function flatSIP(s,r,n){const rm=r/100/12;return s*(Math.pow(1+rm,n)-1)/rm*(1+rm);}
+  const A=flatSIP(sip,base,yrs*12);
+  let corpStepUp=0;let curSIP=sip;
+  for(let y=0;y<yrs;y++){const fvThisYear=flatSIP(curSIP,base,12);corpStepUp=(corpStepUp+fvThisYear)*Math.pow(1+base/100,(yrs-y-1));curSIP*=(1+stepUp/100);}
+  const B=corpStepUp;
+  const adjReturn=Math.max(1,base-inflShock+3);
+  const C=flatSIP(sip,adjReturn,yrs*12);
+  let corpD=0;
+  for(let y=0;y<yrs;y++){corpD+=flatSIP(sip,base,12);corpD*=Math.pow(1+base/100,1);if(y+1===crashYr)corpD*=(1-crashPct/100);}
+  const D=Math.max(0,corpD);
+  const earlyYrs=Math.max(1,yrs-5);
+  const E=flatSIP(sip,base,earlyYrs*12);
+  const rows=[
+    {label:'Base — flat SIP @ '+base+'%',val:A,cls:'green',note:'Your baseline projection'},
+    {label:'Step-Up — +'+stepUp+'% SIP per year',val:B,cls:'green',note:B>A?'+'+(((B-A)/A)*100).toFixed(0)+'% more than baseline':'Marginal gain'},
+    {label:'Inflation shock — returns drop to '+adjReturn.toFixed(1)+'%',val:C,cls:C>A*0.7?'amber':'red',note:(((C-A)/A)*100).toFixed(0)+'% vs baseline'},
+    {label:'Market crash — '+crashPct+'% drop in yr '+crashYr,val:D,cls:D>A*0.6?'amber':'red',note:'Crash yr '+crashYr+', then full recovery'},
+    {label:'Retire 5 yrs early — '+earlyYrs+' yrs of SIP',val:E,cls:'amber',note:(yrs-earlyYrs)+' fewer years of compounding'},
+  ];
+  const best=Math.max(...rows.map(r=>r.val));
+  document.getElementById('scenarioResult').innerHTML=
+    '<div class="result-box"><div class="result-title">Scenario comparison — ₹'+Math.round(sip/1000)+'K/mo SIP · '+yrs+' yr horizon</div></div>'+
+    '<div class="scenario-list" style="margin-top:.5rem">'+
+    rows.map(r=>'<div class="scenario-row"><div style="display:flex;flex-direction:column;gap:2px"><span class="scenario-label" style="font-weight:600">'+r.label+'</span><span style="font-size:10px;color:var(--muted)">'+r.note+'</span></div><span class="scenario-val '+r.cls+'">'+fmtC(r.val)+(r.val===best?' ★':'')+'</span></div>').join('')+
+    '</div>'+
+    '<div class="verdict '+(B>A*1.5?'good':'neutral')+'" style="margin-top:.75rem"><strong>Key insight:</strong> '+
+    (B>A*1.5?'A '+stepUp+'% annual step-up grows your corpus '+((B/A-1)*100).toFixed(0)+'% more than flat SIP over '+yrs+' years — the single biggest lever.':
+     'Even a moderate step-up significantly outperforms flat SIP over time. Crashes recover — skipping investments does not.')+'</div>';
 }
 
 // ════════ PROFILE ════════
@@ -1504,7 +1738,7 @@ function renderDashboard(){
 // ════════ INIT ════════
   document.getElementById('kpiFG').textContent='33';document.getElementById('kpiFGLabel').textContent='Fear';
 document.addEventListener('DOMContentLoaded',()=>{
-  calcSIP();calcLS();calcGoal();calcROI();
+  calcSIP();calcLS();calcGoal();calcROI();calcScenario();
   calcFIRE();calcCorpus();calcWithdraw();
   calcCrash();calcStopLoss();calcPortfolio();
   calcEMI();calcPrepay();calcTax();calcCG();calcHealth();
@@ -1514,5 +1748,6 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(first){first.classList.add('active');const key=first.dataset.asset;const det=document.getElementById('det-'+key);if(det)det.classList.add('active');}
 });
 </script>
+</div><!-- /fv-app -->
 </body>
 </html>
