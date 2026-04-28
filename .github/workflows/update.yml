@@ -6,7 +6,7 @@ on:
   workflow_dispatch:        # manual trigger from GitHub UI
   push:
     branches: [main]
-    paths: ['generate_site.py']   # re-run whenever you edit the script
+    paths: ['Finvault.py']   # re-run whenever you edit the script
 
 permissions:
   contents: write           # needed to commit index.html back to repo
@@ -31,7 +31,7 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
-        run: python generate_site.py
+        run: python Finvault.py
 
       - name: Commit and push
         run: |
