@@ -913,6 +913,73 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
 /* ─ Sensitivity row ─ */
 .sens-row{display:flex;justify-content:space-between;padding:.25rem 0;border-bottom:1px solid var(--border);font-size:11px;font-family:var(--mono)}
 .sens-row:last-child{border-bottom:none}
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVE — MOBILE FIXES
+   Gaps identified: output-grid, form-row, section-header,
+   kpi-row small, padding reduction, iOS input zoom, hero font
+═══════════════════════════════════════════════ */
+
+/* Tablet (≤768px) */
+@media(max-width:768px){
+  /* Section header: title + meta stack vertically */
+  .section-header{flex-direction:column;align-items:flex-start;gap:.4rem}
+  /* Hero text smaller */
+  .hero-h1{font-size:20px}
+  .hero-band{padding:1.25rem 1.25rem 1rem}
+  /* Signal area padding tighter */
+  .signal-area{padding:1rem}
+  /* Calc inputs/outputs padding tighter */
+  .calc-inputs,.calc-outputs{padding:1rem}
+  /* Dashboard blocks tighter */
+  .dash-block{padding:.9rem 1rem}
+  .dash-kpi{padding:.75rem .9rem}
+  /* Scenario rows wrap label if long */
+  .scenario-row{flex-wrap:wrap;gap:.3rem}
+  /* Alert items readable */
+  .alert-item{font-size:12px}
+  /* Rec items readable */
+  .rec-item-pro{font-size:12px}
+}
+
+/* Mobile (≤480px) */
+@media(max-width:480px){
+  /* output-grid → single column (was always 2-col) */
+  .output-grid{grid-template-columns:1fr}
+  /* form-row → stack inputs vertically (was side-by-side) */
+  .form-row{flex-direction:column;gap:0}
+  /* kpi-row → single column on small phones */
+  .kpi-row{grid-template-columns:1fr 1fr}
+  .kpi-cell{border-right:none;border-bottom:1px solid var(--border)}
+  /* Detail metrics → 2 per row minimum */
+  .detail-metrics{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+  /* Hero font */
+  .hero-h1{font-size:18px}
+  .hero-body{font-size:12px}
+  /* Status strip — hide right side on tiny screens */
+  .strip-right{display:none}
+  /* Nav badge — shorten */
+  .nav-badge{font-size:8px;padding:2px 5px}
+  /* Ticker symbol size */
+  .tick{padding:0 12px;gap:5px}
+  /* Signal detail header wraps */
+  .detail-header{flex-direction:column;align-items:flex-start;gap:.5rem}
+  /* Sidebar item desc hidden on tiny screens */
+  .sidebar-item-desc{display:none}
+  /* Smaller heading for calc outputs */
+  .output-value.big{font-size:18px}
+  .output-value{font-size:15px}
+  /* Calc tabs scroll better */
+  .calc-tab{padding:10px 12px;font-size:10px}
+  /* Table font size */
+  table{font-size:10px}
+  th,td{padding:6px 7px}
+}
+
+/* iOS: prevent zoom on input focus (font-size must be >= 16px) */
+@media(max-width:768px){
+  .form-input,select.form-input{font-size:16px}
+}
 </style>
 </head>
 <body>
