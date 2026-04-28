@@ -6,11 +6,18 @@ Run this script to generate a fresh index.html with live market data baked in.
 GitHub Actions runs this every hour automatically.
 
 SETUP (run once):
-  pip install requests yfinance
+  pip install requests yfinance firebase-admin
+
+LOCAL DEV:
+  Place your Firebase service account JSON as: serviceAccountKey.json  (git-ignored)
 
 USAGE:
   python generate_site.py          # generates index.html in current folder
   python generate_site.py --dry    # prints data but doesn't write file
+
+GITHUB ACTIONS SECRETS REQUIRED:
+  FIREBASE_SERVICE_ACCOUNT  — full contents of the service account .json file
+  FIREBASE_PROJECT_ID       — e.g. finvault-pro-910dc
 
 GITHUB ACTIONS:
   See .github/workflows/update.yml — runs this every hour, commits index.html
@@ -23,18 +30,62 @@ def install(pkg):
     import subprocess
     subprocess.check_call([sys.executable, "-m", "pip", "install", pkg, "-q"])
 
-for pkg in ["requests", "yfinance"]:
+for pkg in ["requests", "yfinance", "firebase_admin"]:
     try: __import__(pkg)
-    except ImportError: install(pkg)
+    except ImportError: install("firebase-admin" if pkg == "firebase_admin" else pkg)
 
 import requests
 import yfinance as yf
 
 # ─────────────────────────────────────────────────────────────
+# FIREBASE — Firestore replaces data.json (LKG cache)
+# ─────────────────────────────────────────────────────────────
+import tempfile
+import firebase_admin
+from firebase_admin import credentials, firestore as fs_module
+
+_db = None   # singleton
+
+def get_firebase_db():
+    """Return Firestore client. Initialises Firebase on first call."""
+    global _db
+    if _db is not None:
+        return _db
+    if firebase_admin._apps:
+        _db = fs_module.client()
+        return _db
+
+    sa_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
+    if sa_json:
+        # ── Running in GitHub Actions: creds come from the secret ──
+        try:
+            sa_dict = json.loads(sa_json)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"FIREBASE_SERVICE_ACCOUNT secret is not valid JSON: {e}")
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(sa_dict, f)
+            tmp_path = f.name
+        cred = credentials.Certificate(tmp_path)
+    else:
+        # ── Local dev: place your downloaded key file here ──
+        local_key = "serviceAccountKey.json"
+        if not os.path.exists(local_key):
+            raise FileNotFoundError(
+                "No FIREBASE_SERVICE_ACCOUNT env var and no serviceAccountKey.json found.\n"
+                "For local dev: download your Firebase service-account key and save it as serviceAccountKey.json"
+            )
+        cred = credentials.Certificate(local_key)
+
+    firebase_admin.initialize_app(cred)
+    _db = fs_module.client()
+    return _db
+
+# ─────────────────────────────────────────────────────────────
 # CONFIG — tweak as needed
 # ─────────────────────────────────────────────────────────────
-REPO_RATE     = 6.25   # RBI repo rate % — update when RBI changes it
-PREV_REPO     = 6.50   # previous rate  — to detect cutting/hiking cycle
+REPO_RATE     = 6.25   # RBI repo rate % — UPDATE after every RBI MPC meeting (held ~every 6 weeks)
+                       # RBI MPC schedule: https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx
+PREV_REPO     = 6.50   # previous rate — determines cutting/hiking/stable cycle direction
 HOME_LOAN     = 8.50   # avg home loan rate %
 OUTPUT_FILE   = "index.html"
 LKG_FILE      = "data.json"   # Last Known Good data cache — fallback if APIs fail
@@ -46,19 +97,44 @@ SESSION.headers.update({"User-Agent": "Mozilla/5.0 FinVault/3.0", "Accept": "app
 # FETCH HELPERS
 # ─────────────────────────────────────────────────────────────
 def save_lkg(crypto_data, stocks_data):
+    """Save market data to Firestore (primary) with local file as fallback."""
+    payload = {
+        "crypto": crypto_data,
+        "stocks": stocks_data,
+        "saved_at": datetime.datetime.utcnow().isoformat()
+    }
+    # ── Firestore ──
+    try:
+        db = get_firebase_db()
+        db.collection("market_data").document("latest").set(payload)
+        print("  ✅ Saved to Firestore")
+    except Exception as e:
+        print(f"  ⚠ Firestore save failed: {e}")
+    # ── Local fallback ──
     try:
         with open(LKG_FILE, "w", encoding="utf-8") as f:
-            json.dump({"crypto": crypto_data, "stocks": stocks_data,
-                       "saved_at": datetime.datetime.utcnow().isoformat()}, f)
+            json.dump(payload, f)
     except Exception as e:
-        print(f"  ⚠ Could not save LKG data: {e}")
+        print(f"  ⚠ Local LKG save failed: {e}")
 
 def load_lkg():
+    """Load last-known-good data — Firestore first, local file as fallback."""
+    # ── Try Firestore ──
+    try:
+        db = get_firebase_db()
+        doc = db.collection("market_data").document("latest").get()
+        if doc.exists:
+            d = doc.to_dict()
+            print(f"  ↩ Using Firestore data from {d.get('saved_at', 'unknown')}")
+            return d.get("crypto", {}), d.get("stocks", {})
+    except Exception as e:
+        print(f"  ⚠ Firestore load failed: {e}")
+    # ── Fallback: local file ──
     try:
         with open(LKG_FILE, "r", encoding="utf-8") as f:
             d = json.load(f)
         saved_at = d.get("saved_at", "unknown")
-        print(f"  ↩ Using last-known-good data from {saved_at}")
+        print(f"  ↩ Using local LKG data from {saved_at}")
         return d.get("crypto", {}), d.get("stocks", {})
     except Exception:
         return {}, {}
@@ -172,14 +248,29 @@ def fetch_stocks():
             prev_ma200 = float(closes.iloc[-201:-1].mean()) if len(closes) >= 201 else ma200
             golden_cross = (ma50 > ma200) and (prev_ma50 <= prev_ma200)
             death_cross  = (ma50 < ma200) and (prev_ma50 >= prev_ma200)
+            # Wilder's RSI: seed with simple mean for first 14 bars, then EMA (alpha=1/14)
             delta    = closes.diff()
-            gain     = delta.clip(lower=0).rolling(14).mean()
-            loss     = (-delta.clip(upper=0)).rolling(14).mean()
+            gain_s   = delta.clip(lower=0)
+            loss_s   = (-delta.clip(upper=0))
+            gain     = gain_s.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
+            loss     = loss_s.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
             rsi      = float((100 - 100 / (1 + gain / loss)).iloc[-1])
+            # MACD: 12-day EMA minus 26-day EMA; Signal = 9-day EMA of MACD line
+            ema12     = closes.ewm(span=12, adjust=False).mean()
+            ema26     = closes.ewm(span=26, adjust=False).mean()
+            macd_line = ema12 - ema26
+            signal_line = macd_line.ewm(span=9, adjust=False).mean()
+            macd_hist   = macd_line - signal_line
+            macd_val    = float(macd_line.iloc[-1])
+            macd_sig    = float(signal_line.iloc[-1])
+            macd_cross_bull = (macd_val > macd_sig) and (float(macd_line.iloc[-2]) <= float(signal_line.iloc[-2]))
+            macd_cross_bear = (macd_val < macd_sig) and (float(macd_line.iloc[-2]) >= float(signal_line.iloc[-2]))
             data[key] = {"price": price, "prev": prev, "chg": chg,
                          "ma20": ma20, "ma50": ma50, "ma200": ma200,
                          "golden_cross": golden_cross, "death_cross": death_cross,
-                         "above_200": price > ma200, "rsi": rsi}
+                         "above_200": price > ma200, "rsi": rsi,
+                         "macd": macd_val, "macd_signal": macd_sig,
+                         "macd_cross_bull": macd_cross_bull, "macd_cross_bear": macd_cross_bear}
         except Exception as e:
             print(f"  ⚠ {ticker} failed: {e}")
             data[key] = None
@@ -202,6 +293,17 @@ def fetch_stocks():
         except Exception as e:
             print(f"  ⚠ {ticker} failed: {e}")
             data[key] = None
+
+    # Gold-to-Silver Ratio
+    try:
+        gold_p   = data.get("gold_yf", {}) or {}
+        silver_p = data.get("silver_yf", {}) or {}
+        if gold_p.get("price") and silver_p.get("price") and silver_p["price"] > 0:
+            data["gold_silver_ratio"] = gold_p["price"] / silver_p["price"]
+        else:
+            data["gold_silver_ratio"] = None
+    except Exception:
+        data["gold_silver_ratio"] = None
     return data
 
 # ─────────────────────────────────────────────────────────────
@@ -241,6 +343,7 @@ def sig_silver(d, stocks):
     price     = sy["price"]
     chg       = sy["chg"]
     ab50      = price > sy["ma50"]
+    gsr       = stocks.get("gold_silver_ratio")
     if below_ath > 40:
         s,c = "BUY","buy"
         reasons = [f"Silver {below_ath:.1f}% below 3-month high — deeply discounted",
@@ -254,6 +357,13 @@ def sig_silver(d, stocks):
         s,c = "HOLD","hold"
         reasons = [f"Silver {below_ath:.1f}% below recent high — gradual accumulation zone",
                    "Silver is 2–3× more volatile than gold — keep position sizing smaller"]
+    if gsr is not None:
+        if gsr > 80:
+            reasons.append(f"Gold/Silver Ratio = {gsr:.1f} — historically high; silver undervalued vs gold, favours silver accumulation")
+        elif gsr < 50:
+            reasons.append(f"Gold/Silver Ratio = {gsr:.1f} — historically low; silver may be overvalued relative to gold")
+        else:
+            reasons.append(f"Gold/Silver Ratio = {gsr:.1f} — within normal historical range (50–80)")
     if chg < -2: reasons.append(f"Today -{abs(chg):.1f}% — short-term dip, potential entry")
     if not ab50: reasons.append("Below 50-day MA — wait for stabilization or buy in tranches")
     reasons.append("For India: Nippon India Silver ETF or ICICI Prudential Silver ETF on NSE")
@@ -261,6 +371,7 @@ def sig_silver(d, stocks):
         "Silver (USD/oz)": f"${price:.2f}  ({pct(chg)} today)",
         "50-Day MA":       f"${sy['ma50']:.2f}  ({'above' if ab50 else 'below'})",
         "vs 3-Month High": f"{below_ath:.1f}% below",
+        "Gold/Silver Ratio": f"{gsr:.1f}" if gsr else "N/A",
         "Source":          "Yahoo Finance SI=F (silver futures)"
     }
     return {"signal":s,"cls":c,"reasons":reasons,"metrics":metrics,
@@ -305,7 +416,7 @@ def sig_stocks(stocks):
     ab20, ab50 = n["price"] > n["ma20"], n["price"] > n["ma50"]
     ab200 = n.get("above_200", True)
     rsi = n["rsi"]
-    high_vol = india_vix is not None and india_vix > 20
+    high_vol = india_vix is not None and india_vix > 18  # tightened from 20 — India VIX structurally lower than US VIX
     rsi_ob  = 65 if high_vol else 70
     rsi_os  = 45 if high_vol else 40
     golden = n.get("golden_cross", False)
@@ -334,6 +445,8 @@ def sig_stocks(stocks):
         reasons = ["Mixed MA signals — wait for clear breakout above 50-day MA"]
     if golden: reasons.insert(0, "Golden Cross detected (50-day MA crossed above 200-day) — strong long-term bull signal")
     if death:  reasons.insert(0, "Death Cross detected (50-day MA crossed below 200-day) — long-term bearish signal; be cautious")
+    if n.get("macd_cross_bull"): reasons.append("MACD bullish crossover — momentum turning positive, supports BUY signal")
+    if n.get("macd_cross_bear"): reasons.append("MACD bearish crossover — momentum turning negative, be cautious with new entries")
     if high_vol: reasons.append(f"India VIX = {india_vix:.1f} (elevated) — widen entry zones, use tranches not lump-sum")
     if rsi < rsi_os: reasons.append(f"RSI = {rsi:.0f} — oversold. Buying pressure may build soon")
     if n["chg"] < -2: reasons.append(f"Today -{abs(n['chg']):.1f}% — potential short-term entry")
@@ -343,8 +456,9 @@ def sig_stocks(stocks):
         "50-Day MA": f"{n['ma50']:,.0f}  ({'above' if ab50 else 'below'})",
         "200-Day MA": f"{n['ma200']:,.0f}  ({'above' if ab200 else 'below'})",
         "RSI (14)":  f"{rsi:.1f}  ({'Oversold' if rsi<rsi_os else 'Overbought' if rsi>rsi_ob else 'Neutral'})",
+        "MACD":      f"{n.get('macd',0):.1f}  (signal {n.get('macd_signal',0):.1f})",
     }
-    if india_vix: metrics["India VIX"] = f"{india_vix:.1f}  ({'High' if high_vol else 'Normal'})"
+    if india_vix: metrics["India VIX"] = f"{india_vix:.1f}  ({'High' if india_vix > 18 else 'Normal'})"
     return {"signal":s,"cls":c,"reasons":reasons,"metrics":metrics,
             "source":"Yahoo Finance via yfinance","context":"Time in market beats timing the market. 5+ year horizon? Any dip is a buying opportunity."}
 
@@ -381,6 +495,8 @@ def sig_usstocks(stocks, d):
                    "Index fund investors: good accumulation opportunity"]
     if golden: reasons.insert(0, "Golden Cross on S&P 500 — 50-day MA crossed above 200-day. Historically bullish long-term signal")
     if death:  reasons.insert(0, "Death Cross on S&P 500 — 50-day MA crossed below 200-day. Proceed cautiously, reduce lump-sum")
+    if sp.get("macd_cross_bull"): reasons.append("MACD bullish crossover on S&P 500 — momentum turning positive, confirms BUY signal")
+    if sp.get("macd_cross_bear"): reasons.append("MACD bearish crossover on S&P 500 — momentum weakening, wait before adding positions")
     if high_vol: reasons.append(f"VIX = {vix:.1f} (elevated fear) — use tranches over 4–6 weeks, not single lump-sum")
     if not ab200: reasons.append(f"S&P 500 below 200-day MA ({sp['ma200']:,.0f}) — long-term downtrend; scale in gradually")
     reasons.append("For INR investors: Factor in USD/INR currency risk. Aim for 20–30% global allocation.")
@@ -391,6 +507,7 @@ def sig_usstocks(stocks, d):
         "S&P 50-Day MA":  f"{sp['ma50']:,.0f}  ({'above' if ab50 else 'below'})",
         "S&P 200-Day MA": f"{sp['ma200']:,.0f}  ({'above' if ab200 else 'below'})",
         "RSI (14)": f"{rsi:.1f}",
+        "MACD":     f"{sp.get('macd',0):.1f}  (signal {sp.get('macd_signal',0):.1f})",
         "Fear & Greed": f"{fs}/100 — {fl}" if fs else "N/A",
     }
     if vix: metrics["CBOE VIX"] = f"{vix:.1f}  ({'Elevated' if high_vol else 'Normal'})"
@@ -414,13 +531,18 @@ def sig_property():
     reasons += ["Only buy if you plan to hold 7–10+ years",
                 "REIT alternative: Mindspace/Brookfield (7–8% yield + liquidity)"]
     gross_rental = 3.0
-    pt_rental_10 = gross_rental * (1 - 0.10)
-    pt_rental_30 = gross_rental * (1 - 0.30)
+    maintenance  = gross_rental * 0.12          # ~12% maintenance cost on gross rent
+    net_before_s24 = gross_rental - maintenance
+    s24_deduction   = net_before_s24 * 0.30    # Section 24: 30% standard deduction on net rent
+    taxable_rental  = net_before_s24 - s24_deduction
+    pt_rental_10 = gross_rental - (taxable_rental * 0.10)
+    pt_rental_30 = gross_rental - (taxable_rental * 0.30)
     metrics = {"RBI Repo Rate": f"{REPO_RATE}%  ({direction.upper()})",
                "Avg Home Loan": f"~{HOME_LOAN}%", "Ideal Hold": "7–10 years min",
                "Gross Rental Yield": f"~{gross_rental:.1f}% (metro avg)",
-               "Post-Tax Yield (10%)": f"~{pt_rental_10:.2f}%",
-               "Post-Tax Yield (30%)": f"~{pt_rental_30:.2f}%",
+               "Net Taxable Yield": f"~{taxable_rental:.2f}% (after 12% maintenance + Sec 24)",
+               "Post-Tax Yield (10% slab)": f"~{pt_rental_10:.2f}%",
+               "Post-Tax Yield (30% slab)": f"~{pt_rental_30:.2f}%",
                "Appreciation": "5–12%/yr (city-dependent)"}
     return {"signal":s,"cls":c,"reasons":reasons,"metrics":metrics,
             "source":f"RBI rate cycle analysis. Repo rate: {REPO_RATE}%","context":"Location beats timing in real estate. Buy right, not just cheap."}
@@ -440,18 +562,22 @@ def sig_fd():
         s,c = "BUY","buy"
         reasons = ["Stable high rates — FD returns competitive with equity risk"]
     reasons.append("FD income is taxable at slab rate — compare with debt MFs for post-tax returns")
-    fd_rate  = 8.5
+    fd_rate      = 8.5
+    inflation    = 5.0   # approximate CPI inflation — update periodically
+    real_rate    = fd_rate - inflation
     pt_10 = fd_rate * (1 - 0.10)
     pt_20 = fd_rate * (1 - 0.20)
     pt_30 = fd_rate * (1 - 0.30)
     metrics = {"Big Bank FD": "~7.0–7.5% p.a.", "Small Finance Bank": "~8.5–9.0%",
-               "RBI Savings Bond": "~7.35% (govt-backed)", "Debt MF": "~7–8% (tax-efficient post 3yr)",
+               "RBI Savings Bond": "~7.35% (govt-backed)",
+               "Debt MF (post Apr 2023)": "~7–8% (taxed at slab rate — indexation removed)",
                "Repo Rate": f"{REPO_RATE}% ({direction})",
+               "Real Rate of Return": f"~{real_rate:.1f}% (FD rate − {inflation:.0f}% inflation)",
                "Post-Tax Yield (10%)": f"~{pt_10:.2f}% on SFB FD",
                "Post-Tax Yield (20%)": f"~{pt_20:.2f}% on SFB FD",
                "Post-Tax Yield (30%)": f"~{pt_30:.2f}% on SFB FD"}
     return {"signal":s,"cls":c,"reasons":reasons,"metrics":metrics,
-            "source":"Public bank disclosures + RBI policy","context":"FDs are taxable — for high earners, tax-free bonds or PPF may give better post-tax returns."}
+            "source":"Public bank disclosures + RBI policy","context":"FDs are taxable — for high earners, tax-free bonds or PPF may give better post-tax returns. Note: Debt MFs purchased after April 1, 2023 are taxed at slab rates (indexation benefit removed), making them similar to FDs for tax purposes."}
 
 # ─────────────────────────────────────────────────────────────
 # MARKET STATUS
@@ -534,8 +660,8 @@ def render_ticker(d, stocks):
         )
     india_vix = stocks.get("india_vix")
     if india_vix:
-        cls = "chg-dn" if india_vix > 20 else "chg-up"
-        label = "ELEVATED" if india_vix > 20 else "NORMAL"
+        cls = "chg-dn" if india_vix > 18 else "chg-up"
+        label = "ELEVATED" if india_vix > 18 else "NORMAL"
         items.append(
             f'<span class="tick"><span class="tick-sym">INDIA VIX</span>'
             f'<span class="tick-price {cls}">{india_vix:.1f}</span>'
@@ -654,6 +780,44 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 <meta name="description" content="Professional financial calculators and live market signals. SIP, FIRE, EMI, tax, and BUY/HOLD/WAIT signals for gold, crypto, stocks, property.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@300;400;500;600;700;800;900&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<!-- ── Firebase Google Auth ─────────────────────────────── -->
+<script type="module">
+  import { initializeApp }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+  // ⚠ These are FRONTEND (web) config values — safe to embed.
+  // Get them from: Firebase Console → Project Settings → General → Your apps → Web app
+  const firebaseConfig = {
+    apiKey:            "REPLACE_WITH_YOUR_WEB_API_KEY",
+    authDomain:        "finvault-pro-910dc.firebaseapp.com",
+    projectId:         "finvault-pro-910dc",
+    storageBucket:     "finvault-pro-910dc.appspot.com",
+    messagingSenderId: "REPLACE_WITH_MESSAGING_SENDER_ID",
+    appId:             "REPLACE_WITH_APP_ID",
+  };
+
+  const app      = initializeApp(firebaseConfig);
+  const auth     = getAuth(app);
+  const provider = new GoogleAuthProvider();
+
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      document.getElementById("fv-auth-wall").style.display = "none";
+      document.getElementById("fv-app").style.display       = "block";
+      const nameEl = document.getElementById("fv-user-name");
+      if (nameEl) nameEl.textContent = user.displayName || user.email;
+    } else {
+      document.getElementById("fv-auth-wall").style.display = "flex";
+      document.getElementById("fv-app").style.display       = "none";
+    }
+  });
+
+  window.fvSignIn  = () => signInWithPopup(auth, provider).catch(e => alert("Sign-in failed: " + e.message));
+  window.fvSignOut = () => signOut(auth);
+</script>
 <style>
 :root {
   --bg:#05080f; --bg2:#080d18; --surface:#0c1220; --card:#0f1626; --card2:#121b2e;
@@ -905,7 +1069,18 @@ tr:hover td{background:var(--surface)}
 /* ─ Footer ─ */
 footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem;font-size:10px;color:var(--muted);font-family:var(--mono)}
 .footer-trust{display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap}
-/* ─ No-profile notice ─ */
+/* ─ Auth wall ─ */
+#fv-auth-wall{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:var(--bg);gap:1.5rem;padding:2rem}
+.auth-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:2.5rem 2rem;display:flex;flex-direction:column;align-items:center;gap:1.2rem;max-width:360px;width:100%;text-align:center}
+.auth-logo{font-size:28px;font-weight:900;letter-spacing:-.04em;color:#fff}.auth-logo span{color:var(--blue)}
+.auth-tagline{font-size:13px;color:var(--text2);line-height:1.6}
+.auth-btn{display:flex;align-items:center;gap:10px;background:#fff;color:#1f1f1f;border:none;border-radius:6px;padding:11px 22px;font-size:14px;font-weight:600;cursor:pointer;transition:box-shadow .15s;width:100%;justify-content:center}
+.auth-btn:hover{box-shadow:0 2px 12px rgba(0,0,0,.25)}
+.auth-btn svg{flex-shrink:0}
+.auth-note{font-size:10px;color:var(--muted);font-family:var(--mono)}
+/* ─ User bar ─ */
+#fv-user-bar{display:flex;align-items:center;gap:10px;padding:5px 14px;background:var(--surface);border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);justify-content:flex-end}
+#fv-user-bar button{background:none;border:1px solid var(--border2);color:var(--text2);font-size:10px;padding:3px 10px;border-radius:3px;cursor:pointer;font-family:var(--sans)}
 .no-profile-notice{background:rgba(26,107,255,.06);border:1px solid rgba(26,107,255,.2);border-radius:6px;padding:1.5rem;text-align:center;color:var(--text2);font-size:13px}
 .no-profile-notice h3{color:#fff;margin-bottom:.5rem;font-size:16px}
 /* ─ Profile saved msg ─ */
@@ -913,6 +1088,25 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
 /* ─ Sensitivity row ─ */
 .sens-row{display:flex;justify-content:space-between;padding:.25rem 0;border-bottom:1px solid var(--border);font-size:11px;font-family:var(--mono)}
 .sens-row:last-child{border-bottom:none}
+/* ─ Summary bar ─ */
+.summary-bar{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--border);background:var(--bg)}
+@media(max-width:600px){.summary-bar{grid-template-columns:1fr 1fr}}
+.sum-cell{padding:.75rem 1rem;border-right:1px solid var(--border)}
+.sum-cell:last-child{border-right:none}
+.sum-label{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--label);margin-bottom:3px}
+.sum-value{font-family:var(--mono);font-size:15px;font-weight:600;color:#fff;line-height:1}
+.sum-value.green{color:var(--green)}.sum-value.blue{color:var(--blue)}.sum-value.amber{color:var(--amber)}.sum-value.red{color:var(--red)}
+.sum-action{font-size:10px;color:var(--text2);margin-top:3px;line-height:1.4}
+/* ─ Number counter animation ─ */
+@keyframes numPop{0%{opacity:.4;transform:translateY(4px)}100%{opacity:1;transform:none}}
+.num-animated{animation:numPop .45s ease forwards}
+/* ─ Pie chart container ─ */
+.pie-wrap{display:flex;flex-direction:column;align-items:center;gap:.75rem;margin-top:.75rem}
+.pie-legend{display:flex;flex-direction:column;gap:4px;width:100%;max-width:300px}
+.pie-legend-row{display:flex;align-items:center;justify-content:space-between;font-size:11px;gap:6px}
+.pie-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+.pie-legend-label{flex:1;color:var(--text2)}
+.pie-legend-val{font-family:var(--mono);color:var(--text);font-size:11px}
 
 /* ═══════════════════════════════════════════════
    RESPONSIVE — MOBILE FIXES
@@ -983,6 +1177,29 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
 </style>
 </head>
 <body>
+
+<!-- ══ AUTH WALL — shown until user signs in ══════════════ -->
+<div id="fv-auth-wall" style="display:none">
+  <div class="auth-card">
+    <div class="auth-logo">Fin<span>Vault</span><sup style="font-size:12px;color:var(--text2);font-weight:400">PRO</sup></div>
+    <p class="auth-tagline">Professional financial intelligence — live market signals, calculators &amp; your personal dashboard.</p>
+    <button class="auth-btn" onclick="fvSignIn()">
+      <!-- Google G logo -->
+      <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Sign in with Google
+    </button>
+    <span class="auth-note">Your data is never sold &middot; Educational use only</span>
+  </div>
+</div>
+
+<!-- ══ APP — hidden until authenticated ══════════════════ -->
+<div id="fv-app" style="display:none">
+
+<!-- User bar -->
+<div id="fv-user-bar">
+  <span>Signed in as <strong id="fv-user-name"></strong></span>
+  <button onclick="fvSignOut()">Sign out</button>
+</div>
 
 <!-- Status strip -->
 <div class="status-strip">
@@ -1121,6 +1338,7 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
       <button class="calc-tab" onclick="switchTab(this,'invest','lump')">Lump Sum</button>
       <button class="calc-tab" onclick="switchTab(this,'invest','goal')">Goal Planner</button>
       <button class="calc-tab" onclick="switchTab(this,'invest','roi')">ROI Analyzer</button>
+      <button class="calc-tab" onclick="switchTab(this,'invest','scenario')">Scenario Engine</button>
     </div>
     <!-- SIP -->
     <div id="invest-sip" class="calc-inner active">
@@ -1142,6 +1360,12 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
         <button class="calc-btn" onclick="calcSIP()">Calculate</button>
       </div>
       <div class="calc-outputs">
+        <div class="summary-bar" id="sipSummaryBar">
+          <div class="sum-cell"><div class="sum-label">Corpus</div><div class="sum-value green" id="sb-sipCorpus">—</div><div class="sum-action" id="sb-sipAction">Enter values to calculate</div></div>
+          <div class="sum-cell"><div class="sum-label">Wealth Multiple</div><div class="sum-value blue" id="sb-sipMultiple">—</div></div>
+          <div class="sum-cell"><div class="sum-label">Total Invested</div><div class="sum-value" id="sb-sipInvested">—</div></div>
+          <div class="sum-cell"><div class="sum-label">Wealth Gained</div><div class="sum-value green" id="sb-sipGain">—</div></div>
+        </div>
         <div class="output-grid">
           <div class="output-cell full-col">
             <div class="output-label">Projected Corpus</div>
@@ -1292,6 +1516,22 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
         <div id="roiResult"></div>
       </div>
     </div>
+    <!-- Scenario Engine -->
+    <div id="invest-scenario" class="calc-inner">
+      <div class="calc-inputs">
+        <div class="form-group"><label class="form-label">Monthly SIP (₹)</label><input class="form-input" type="number" id="scSIP" value="15000" oninput="calcScenario()"></div>
+        <div class="form-group"><label class="form-label">Investment Period (years)</label><input class="form-input" type="number" id="scYrs" value="20" oninput="calcScenario()"></div>
+        <div class="form-group"><label class="form-label">Base Return Rate (%)</label><input class="form-input" type="number" id="scBase" value="12" oninput="calcScenario()"></div>
+        <div class="form-group"><label class="form-label">Annual SIP Step-Up (%)</label><input class="form-input" type="number" id="scStepUp" value="10" oninput="calcScenario()"></div>
+        <div class="form-group"><label class="form-label">Inflation Shock (%)</label><input class="form-input" type="number" id="scInflation" value="8" oninput="calcScenario()"></div>
+        <div class="form-group"><label class="form-label">Market Crash Year</label><input class="form-input" type="number" id="scCrashYr" value="5" oninput="calcScenario()"></div>
+        <div class="form-group"><label class="form-label">Crash Depth (%)</label><input class="form-input" type="number" id="scCrashPct" value="40" oninput="calcScenario()"></div>
+        <button class="calc-btn" onclick="calcScenario()">Run All Scenarios</button>
+      </div>
+      <div class="calc-outputs">
+        <div id="scenarioResult"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1350,6 +1590,12 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
         <button class="calc-btn" onclick="calcFIRE()">Calculate</button>
       </div>
       <div class="calc-outputs">
+        <div class="summary-bar">
+          <div class="sum-cell"><div class="sum-label">FIRE Number</div><div class="sum-value green" id="sb-fireNum">—</div><div class="sum-action" id="sb-fireAction">Corpus needed at retirement</div></div>
+          <div class="sum-cell"><div class="sum-label">Years to FIRE</div><div class="sum-value blue" id="sb-fireYrs">—</div></div>
+          <div class="sum-cell"><div class="sum-label">SIP Needed</div><div class="sum-value" id="sb-fireSIP">—</div></div>
+          <div class="sum-cell"><div class="sum-label">Status</div><div class="sum-value" id="sb-fireStatus">—</div></div>
+        </div>
         <div class="output-grid">
           <div class="output-cell full-col">
             <div class="output-label">FIRE Number</div>
@@ -1505,6 +1751,10 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
       </div>
       <div class="calc-outputs">
         <div id="portfolioResult"></div>
+        <div class="pie-wrap" id="portfolioPieWrap" style="display:none">
+          <div style="position:relative;width:220px;height:220px"><canvas id="portfolioPie" role="img" aria-label="Asset allocation pie chart"></canvas></div>
+          <div class="pie-legend" id="portfolioPieLegend"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -1544,6 +1794,12 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
         <button class="calc-btn" onclick="calcEMI()">Calculate</button>
       </div>
       <div class="calc-outputs">
+        <div class="summary-bar">
+          <div class="sum-cell"><div class="sum-label">Monthly EMI</div><div class="sum-value" id="sb-emiEMI">—</div><div class="sum-action" id="sb-emiAction">Move to Prepayment tab to save interest</div></div>
+          <div class="sum-cell"><div class="sum-label">Total Interest</div><div class="sum-value red" id="sb-emiInterest">—</div></div>
+          <div class="sum-cell"><div class="sum-label">Total Payment</div><div class="sum-value" id="sb-emiTotal">—</div></div>
+          <div class="sum-cell"><div class="sum-label">Interest Ratio</div><div class="sum-value amber" id="sb-emiRatio">—</div></div>
+        </div>
         <div class="output-grid">
           <div class="output-cell full-col">
             <div class="output-label">Monthly EMI</div>
@@ -1644,6 +1900,12 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
         <button class="calc-btn" onclick="calcTax()">Calculate</button>
       </div>
       <div class="calc-outputs">
+        <div class="summary-bar">
+          <div class="sum-cell"><div class="sum-label">Best Regime</div><div class="sum-value green" id="sb-taxRegime">—</div><div class="sum-action" id="sb-taxAction">—</div></div>
+          <div class="sum-cell"><div class="sum-label">Tax Saving</div><div class="sum-value green" id="sb-taxSaving">—</div></div>
+          <div class="sum-cell"><div class="sum-label">Old Regime Tax</div><div class="sum-value amber" id="sb-taxOld">—</div></div>
+          <div class="sum-cell"><div class="sum-label">New Regime Tax</div><div class="sum-value blue" id="sb-taxNew">—</div></div>
+        </div>
         <div id="taxResult"></div>
         <div style="font-size:10px;color:var(--muted);margin-top:.75rem;font-family:var(--mono)">FY 2024-25 &middot; Resident individual &middot; Verify with a CA</div>
       </div>
@@ -1792,12 +2054,26 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
 </footer>
 
 </div><!-- /page -->
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
 // ════════ UTILS ════════
 function fmtC(v){if(!v&&v!==0)return'—';if(v>=1e7)return'₹'+(v/1e7).toFixed(2)+' Cr';if(v>=1e5)return'₹'+(v/1e5).toFixed(2)+' L';return'₹'+Math.round(v).toLocaleString('en-IN')}
 function fmtINR(v){return'₹'+Math.round(v).toLocaleString('en-IN')}
 function pct(v,dp=2){return(v>=0?'+':'')+v.toFixed(dp)+'%'}
+// ── Number counter animation ──
+function animateNum(el,rawVal,fmt){
+  if(!el)return;
+  el.classList.remove('num-animated');
+  void el.offsetWidth;
+  el.classList.add('num-animated');
+  const start=performance.now(),dur=500,from=0;
+  function step(ts){
+    const p=Math.min((ts-start)/dur,1),ease=1-Math.pow(1-p,3);
+    el.textContent=fmt(from+(rawVal-from)*ease);
+    if(p<1)requestAnimationFrame(step);else el.textContent=fmt(rawVal);
+  }
+  requestAnimationFrame(step);
+}
 
 // ════════ NAV ════════
 function showSection(id){
@@ -1839,11 +2115,21 @@ function calcSIP(){
   const r=rate/100/12,n=yrs*12;
   const corpus=sip*(Math.pow(1+r,n)-1)/r*(1+r);
   const invested=sip*n,gain=corpus-invested;
+  const multiple=corpus/invested;
+  // summary bar + animated numbers
+  animateNum(document.getElementById('sb-sipCorpus'),corpus,fmtC);
+  animateNum(document.getElementById('sb-sipInvested'),invested,fmtC);
+  animateNum(document.getElementById('sb-sipGain'),gain,fmtC);
+  const sbMult=document.getElementById('sb-sipMultiple');
+  if(sbMult){sbMult.classList.remove('num-animated');void sbMult.offsetWidth;sbMult.classList.add('num-animated');sbMult.textContent=multiple.toFixed(2)+'x';}
+  const sbAct=document.getElementById('sb-sipAction');
+  if(sbAct)sbAct.textContent=multiple>=5?'Excellent compounding — stay invested!':multiple>=3?'Good growth — increase SIP yearly by 10%':'Consider increasing SIP or tenure';
+  // detail outputs
   document.getElementById('sipCorpus').textContent=fmtC(corpus);
   document.getElementById('sipCorpusSub').textContent='at '+rate+'% p.a. over '+yrs+' years';
   document.getElementById('sipInvested').textContent=fmtC(invested);
   document.getElementById('sipGain').textContent=fmtC(gain);
-  document.getElementById('sipMultiple').textContent=(corpus/invested).toFixed(2)+'x';
+  document.getElementById('sipMultiple').textContent=multiple.toFixed(2)+'x';
   document.getElementById('sipCagr').textContent=rate+'%';
   // Sensitivity
   const rates=[rate-4,rate-2,rate,rate+2,rate+4].filter(x=>x>0);
@@ -1935,6 +2221,12 @@ function calcFIRE(){
   const status=futureSaved>=fireNum;
   document.getElementById('fireResult').innerHTML='<div class="verdict '+(status?'good':'warning')+'"><strong>'+(status?'On Track':'Gap Alert')+'</strong> — '+(status?'Your current savings + SIP covers the FIRE number.':'You need '+fmtC(sipNeeded)+'/mo SIP to bridge the gap.')+'</div>';
   document.getElementById('firePathResult').innerHTML='<div class="scenario-list"><div class="scenario-row"><span class="scenario-label">Monthly expenses at retirement</span><span class="scenario-val">'+fmtC(inflExp)+'</span></div><div class="scenario-row"><span class="scenario-label">FIRE number ('+swr+'% SWR)</span><span class="scenario-val green">'+fmtC(fireNum)+'</span></div><div class="scenario-row"><span class="scenario-label">Current savings future value</span><span class="scenario-val">'+fmtC(futureSaved)+'</span></div><div class="scenario-row"><span class="scenario-label">Gap to bridge via SIP</span><span class="scenario-val '+(gap>0?'amber':'green')+'">'+fmtC(gap)+'</span></div></div>';
+  // summary bar
+  animateNum(document.getElementById('sb-fireNum'),fireNum,fmtC);
+  animateNum(document.getElementById('sb-fireSIP'),sipNeeded,fmtC);
+  const sbFY=document.getElementById('sb-fireYrs');if(sbFY){sbFY.classList.remove('num-animated');void sbFY.offsetWidth;sbFY.classList.add('num-animated');sbFY.textContent=yrs+' yrs';}
+  const sbFS=document.getElementById('sb-fireStatus');if(sbFS){sbFS.classList.remove('num-animated');void sbFS.offsetWidth;sbFS.classList.add('num-animated');sbFS.textContent=status?'On Track':'Gap Alert';sbFS.style.color=status?'var(--green)':'var(--amber)';}
+  const sbFA=document.getElementById('sb-fireAction');if(sbFA)sbFA.textContent=status?'You are on track — keep investing!':'Increase SIP by '+fmtC(sipNeeded)+'/mo to retire at '+retire;
 }
 
 // ════════ CORPUS ════════
@@ -1999,6 +2291,22 @@ function calcPortfolio(){
   const assets=[['Equity',eq,12,-30],['Debt/FD',debt,8,-2],['Gold',gold,10,-15],['Real Estate',re,10,-25],['Crypto',crypto,50,-60],['Cash',cash,3,-1]];
   const crashImpact=assets.reduce((s,[,v,,crash])=>s+v*crash/100,0);
   document.getElementById('portfolioResult').innerHTML='<div class="output-grid"><div class="output-cell full-col"><div class="output-label">Total Portfolio</div><div class="output-value big">'+fmtC(total)+'</div></div></div><div class="scenario-list" style="margin-top:.75rem">'+assets.filter(([,v])=>v>0).map(([label,v,exp,crash])=>'<div class="scenario-row"><span class="scenario-label">'+label+' ('+((v/total)*100).toFixed(0)+'%)</span><span style="font-family:var(--mono);font-size:11px"><span style="color:var(--green)">+'+exp+'%</span> / <span style="color:var(--red)">'+crash+'%</span></span></div>').join('')+'<div class="scenario-row" style="background:rgba(232,64,64,.05)"><span class="scenario-label" style="font-weight:700">30% crash impact</span><span class="scenario-val red">'+fmtC(crashImpact)+'</span></div></div>';
+  // Doughnut pie chart
+  const pieWrap=document.getElementById('portfolioPieWrap');
+  const activeAssets=assets.filter(([,v])=>v>0);
+  if(pieWrap&&activeAssets.length){
+    pieWrap.style.display='flex';
+    const COLORS=['#1a6bff','#00c07f','#e8a825','#e84040','#a259ff','#4ecdc4'];
+    const labels=activeAssets.map(([l])=>l),vals=activeAssets.map(([,v])=>v);
+    const canvas=document.getElementById('portfolioPie');
+    if(window._portfolioPieChart){window._portfolioPieChart.destroy();}
+    window._portfolioPieChart=new Chart(canvas,{
+      type:'doughnut',
+      data:{labels,datasets:[{data:vals,backgroundColor:COLORS.slice(0,labels.length),borderWidth:1,borderColor:'#05080f',hoverOffset:6}]},
+      options:{responsive:true,maintainAspectRatio:true,cutout:'62%',plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.label+': '+fmtC(ctx.raw)+' ('+(ctx.raw/total*100).toFixed(1)+'%)';}}}}},
+    });
+    document.getElementById('portfolioPieLegend').innerHTML=labels.map((l,i)=>'<div class="pie-legend-row"><span class="pie-dot" style="background:'+COLORS[i]+'"></span><span class="pie-legend-label">'+l+'</span><span class="pie-legend-val">'+((vals[i]/total)*100).toFixed(1)+'%</span></div>').join('');
+  }
 }
 
 // ════════ EMI ════════
@@ -2015,6 +2323,13 @@ function calcEMI(){
   document.getElementById('emiEMI').textContent=fmtINR(EMI);
   document.getElementById('emiInterest').textContent=fmtC(interest);
   document.getElementById('emiTotal').textContent=fmtC(totalPay);
+  // summary bar
+  animateNum(document.getElementById('sb-emiEMI'),EMI,fmtINR);
+  animateNum(document.getElementById('sb-emiInterest'),interest,fmtC);
+  animateNum(document.getElementById('sb-emiTotal'),totalPay,fmtC);
+  const ratio=interest/totalPay*100;
+  const sbR=document.getElementById('sb-emiRatio');if(sbR){sbR.classList.remove('num-animated');void sbR.offsetWidth;sbR.classList.add('num-animated');sbR.textContent=ratio.toFixed(0)+'% interest';}
+  const sbA=document.getElementById('sb-emiAction');if(sbA)sbA.textContent=ratio>60?'High interest burden — consider prepaying early':ratio>40?'Moderate burden — lump-sum prepay saves big':'Healthy loan structure';
   // Sensitivity
   const sensRates=[rAnn-1,rAnn-0.5,rAnn,rAnn+0.5,rAnn+1];
   document.getElementById('emiSensitivity').innerHTML=sensRates.filter(x=>x>0).map(rv=>{
@@ -2059,6 +2374,12 @@ function calcTax(){
   var oldCell='<div class="output-cell"><div class="output-label">'+oldLabel+'</div><div class="output-value '+oldValCls+'">'+fmtINR(oldTax)+'</div><div class="output-sub">Taxable: '+fmtC(oldTaxable)+'</div></div>';
   var newCell='<div class="output-cell"><div class="output-label">'+newLabel+'</div><div class="output-value '+newValCls+'">'+fmtINR(newTax)+'</div><div class="output-sub">Taxable: '+fmtC(newTaxable)+'</div></div>';
   document.getElementById('taxResult').innerHTML='<div class="output-grid">'+oldCell+newCell+'</div><div class="verdict good">Choose <strong>'+choiceLabel+'</strong> — saves '+fmtINR(saving)+'/year</div>';
+  // summary bar
+  const sbTR=document.getElementById('sb-taxRegime');if(sbTR){sbTR.classList.remove('num-animated');void sbTR.offsetWidth;sbTR.classList.add('num-animated');sbTR.textContent=choiceLabel;}
+  animateNum(document.getElementById('sb-taxSaving'),saving,fmtINR);
+  animateNum(document.getElementById('sb-taxOld'),oldTax,fmtINR);
+  animateNum(document.getElementById('sb-taxNew'),newTax,fmtINR);
+  const sbTA=document.getElementById('sb-taxAction');if(sbTA)sbTA.textContent='Saves '+fmtINR(saving)+' vs the other regime';
 }
 
 // ════════ CG ════════
@@ -2088,6 +2409,45 @@ function calcHealth(){
   let barsHtml='';
   Object.entries(scores).forEach(([name,s])=>{const color=s.val>=70?'var(--green)':s.val>=50?'var(--amber)':'var(--red)';barsHtml+=`<div class="progress-row"><div class="progress-header"><span>${name}</span><span style="color:${color};font-family:var(--mono)">${Math.round(s.val)}/100</span></div><div class="progress-bar"><div class="progress-fill" style="width:${s.val}%;background:${color}"></div></div><div class="progress-note">${s.tip} · ${s.ideal} · ${s.yours}</div></div>`;});
   document.getElementById('healthResult').innerHTML=`<div style="display:flex;align-items:center;gap:2rem;margin-bottom:1.5rem;flex-wrap:wrap"><div style="text-align:center"><div style="font-size:3.5rem;font-weight:900;font-family:var(--mono);color:${grade.c}">${grade.g}</div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">${grade.l}</div></div><div style="flex:1;min-width:200px"><div class="output-label">Overall Health Score</div><div style="font-size:2rem;font-weight:800;font-family:var(--mono);color:var(--text)">${totalScore}<span style="font-size:1rem;color:var(--muted)">/100</span></div><div class="progress-bar" style="height:5px;margin-top:.5rem"><div class="progress-fill" style="width:${totalScore}%;background:${grade.c}"></div></div></div></div>${barsHtml}`;
+}
+
+// ════════ SCENARIO ENGINE ════════
+function calcScenario(){
+  const sip=+document.getElementById('scSIP').value||15000;
+  const yrs=+document.getElementById('scYrs').value||20;
+  const base=+document.getElementById('scBase').value||12;
+  const stepUp=+document.getElementById('scStepUp').value||10;
+  const inflShock=+document.getElementById('scInflation').value||8;
+  const crashYr=+document.getElementById('scCrashYr').value||5;
+  const crashPct=+document.getElementById('scCrashPct').value||40;
+  function flatSIP(s,r,n){const rm=r/100/12;return s*(Math.pow(1+rm,n)-1)/rm*(1+rm);}
+  const A=flatSIP(sip,base,yrs*12);
+  let corpStepUp=0;let curSIP=sip;
+  for(let y=0;y<yrs;y++){const fvThisYear=flatSIP(curSIP,base,12);corpStepUp=(corpStepUp+fvThisYear)*Math.pow(1+base/100,(yrs-y-1));curSIP*=(1+stepUp/100);}
+  const B=corpStepUp;
+  const adjReturn=Math.max(1,base-inflShock+3);
+  const C=flatSIP(sip,adjReturn,yrs*12);
+  let corpD=0;
+  for(let y=0;y<yrs;y++){corpD+=flatSIP(sip,base,12);corpD*=Math.pow(1+base/100,1);if(y+1===crashYr)corpD*=(1-crashPct/100);}
+  const D=Math.max(0,corpD);
+  const earlyYrs=Math.max(1,yrs-5);
+  const E=flatSIP(sip,base,earlyYrs*12);
+  const rows=[
+    {label:'Base — flat SIP @ '+base+'%',val:A,cls:'green',note:'Your baseline projection'},
+    {label:'Step-Up — +'+stepUp+'% SIP per year',val:B,cls:'green',note:B>A?'+'+(((B-A)/A)*100).toFixed(0)+'% more than baseline':'Marginal gain'},
+    {label:'Inflation shock — returns drop to '+adjReturn.toFixed(1)+'%',val:C,cls:C>A*0.7?'amber':'red',note:(((C-A)/A)*100).toFixed(0)+'% vs baseline'},
+    {label:'Market crash — '+crashPct+'% drop in yr '+crashYr,val:D,cls:D>A*0.6?'amber':'red',note:'Crash yr '+crashYr+', then full recovery'},
+    {label:'Retire 5 yrs early — '+earlyYrs+' yrs of SIP',val:E,cls:'amber',note:(yrs-earlyYrs)+' fewer years of compounding'},
+  ];
+  const best=Math.max(...rows.map(r=>r.val));
+  document.getElementById('scenarioResult').innerHTML=
+    '<div class="result-box"><div class="result-title">Scenario comparison — ₹'+Math.round(sip/1000)+'K/mo SIP · '+yrs+' yr horizon</div></div>'+
+    '<div class="scenario-list" style="margin-top:.5rem">'+
+    rows.map(r=>'<div class="scenario-row"><div style="display:flex;flex-direction:column;gap:2px"><span class="scenario-label" style="font-weight:600">'+r.label+'</span><span style="font-size:10px;color:var(--muted)">'+r.note+'</span></div><span class="scenario-val '+r.cls+'">'+fmtC(r.val)+(r.val===best?' ★':'')+'</span></div>').join('')+
+    '</div>'+
+    '<div class="verdict '+(B>A*1.5?'good':'neutral')+'" style="margin-top:.75rem"><strong>Key insight:</strong> '+
+    (B>A*1.5?'A '+stepUp+'% annual step-up grows your corpus '+((B/A-1)*100).toFixed(0)+'% more than flat SIP over '+yrs+' years — the single biggest lever.':
+     'Even a moderate step-up significantly outperforms flat SIP over time. Crashes recover — skipping investments does not.')+'</div>';
 }
 
 // ════════ PROFILE ════════
@@ -2150,7 +2510,7 @@ function renderDashboard(){
 
 // ════════ INIT ════════
 document.addEventListener('DOMContentLoaded',()=>{
-  calcSIP();calcLS();calcGoal();calcROI();
+  calcSIP();calcLS();calcGoal();calcROI();calcScenario();
   calcFIRE();calcCorpus();calcWithdraw();
   calcCrash();calcStopLoss();calcPortfolio();
   calcEMI();calcPrepay();calcTax();calcCG();calcHealth();
@@ -2160,6 +2520,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(first){first.classList.add('active');const key=first.dataset.asset;const det=document.getElementById('det-'+key);if(det)det.classList.add('active');}
 });
 </script>
+</div><!-- /fv-app -->
 </body>
 </html>"""
 
