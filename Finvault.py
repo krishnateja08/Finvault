@@ -791,12 +791,12 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   // ⚠ These are FRONTEND (web) config values — safe to embed.
   // Get them from: Firebase Console → Project Settings → General → Your apps → Web app
   const firebaseConfig = {
-    apiKey:            "REPLACE_WITH_YOUR_WEB_API_KEY",
-    authDomain:        "finvault-pro-910dc.firebaseapp.com",
-    projectId:         "finvault-pro-910dc",
-    storageBucket:     "finvault-pro-910dc.appspot.com",
-    messagingSenderId: "REPLACE_WITH_MESSAGING_SENDER_ID",
-    appId:             "REPLACE_WITH_APP_ID",
+    apiKey:            "__FIREBASE_API_KEY__",
+    authDomain:        "__FIREBASE_AUTH_DOMAIN__",
+    projectId:         "__FIREBASE_PROJECT_ID__",
+    storageBucket:     "__FIREBASE_STORAGE_BUCKET__",
+    messagingSenderId: "__FIREBASE_MESSAGING_SENDER_ID__",
+    appId:             "__FIREBASE_APP_ID__",
   };
 
   const app      = initializeApp(firebaseConfig);
@@ -2669,6 +2669,13 @@ def build_html(crypto_data, stocks_data, signals, ticker_html, updated_at, marke
     html = html.replace("__REPO_RATE__",      str(REPO_RATE))
     html = html.replace("__SIDEBAR_ITEMS__",  sidebar_html)
     html = html.replace("__SIGNAL_DETAILS__", details_html)
+    # ── Inject Firebase frontend config from environment variables ──
+    html = html.replace("__FIREBASE_API_KEY__",            os.environ.get("FIREBASE_API_KEY", ""))
+    html = html.replace("__FIREBASE_AUTH_DOMAIN__",        os.environ.get("FIREBASE_AUTH_DOMAIN", ""))
+    html = html.replace("__FIREBASE_PROJECT_ID__",         os.environ.get("FIREBASE_PROJECT_ID", ""))
+    html = html.replace("__FIREBASE_STORAGE_BUCKET__",     os.environ.get("FIREBASE_STORAGE_BUCKET", ""))
+    html = html.replace("__FIREBASE_MESSAGING_SENDER_ID__",os.environ.get("FIREBASE_MESSAGING_SENDER_ID", ""))
+    html = html.replace("__FIREBASE_APP_ID__",             os.environ.get("FIREBASE_APP_ID", ""))
     # Inline KPI values via JS init snippet
     fg_js = (
         f"document.getElementById('kpiFG').textContent='{fg_kpi_val}';"
