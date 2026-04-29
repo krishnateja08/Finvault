@@ -1223,6 +1223,7 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
     <li><button onclick="showSection('loans')">Loans</button></li>
     <li><button onclick="showSection('tax')">Tax</button></li>
     <li><button onclick="showSection('health')">Health Score</button></li>
+    <li><button onclick="showSection('portfolio')">Portfolio</button></li>
     <li><button onclick="showSection('profile')">Profile</button></li>
     <li><button onclick="showSection('dashboard')">Dashboard</button></li>
   </ul>
@@ -1339,6 +1340,7 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
       <button class="calc-tab" onclick="switchTab(this,'invest','goal')">Goal Planner</button>
       <button class="calc-tab" onclick="switchTab(this,'invest','roi')">ROI Analyzer</button>
       <button class="calc-tab" onclick="switchTab(this,'invest','scenario')">Scenario Engine</button>
+      <button class="calc-tab" onclick="switchTab(this,'invest','stepup')">Step-Up SIP</button>
     </div>
     <!-- SIP -->
     <div id="invest-sip" class="calc-inner active">
@@ -1535,7 +1537,123 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
   </div>
 </div>
 
-<!-- ═══ RETIRE ═══ -->
+<!-- ═══ PORTFOLIO TRACKER ═══ -->
+<div id="portfolio" class="section">
+  <div class="section-header">
+    <div>
+      <div class="section-title">Portfolio Tracker</div>
+      <div class="section-subtitle">Live P&amp;L · Asset Allocation · Rebalancing</div>
+    </div>
+  </div>
+  <div class="calc-section">
+    <div class="calc-tabs-bar">
+      <button class="calc-tab active" onclick="switchTab(this,'portfolio','holdings')">My Holdings</button>
+      <button class="calc-tab" onclick="switchTab(this,'portfolio','alloc')">Asset Allocation</button>
+    </div>
+
+    <!-- Holdings Tab -->
+    <div id="portfolio-holdings" class="calc-inner active">
+      <div class="calc-inputs" style="gap:.75rem">
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:end">
+          <div class="form-group" style="margin:0"><label class="form-label">Stock / MF Symbol (NSE)</label><input class="form-input" type="text" id="ptSymbol" placeholder="e.g. RELIANCE.NS" style="text-transform:uppercase"></div>
+          <div class="form-group" style="margin:0"><label class="form-label">Qty</label><input class="form-input" type="number" id="ptQty" placeholder="100" min="1"></div>
+          <div class="form-group" style="margin:0"><label class="form-label">Avg Buy Price (₹)</label><input class="form-input" type="number" id="ptBuy" placeholder="2400"></div>
+          <button class="calc-btn" style="margin:0;padding:10px 18px;white-space:nowrap" onclick="ptAddHolding()">+ Add</button>
+        </div>
+        <div id="ptError" style="font-size:12px;color:var(--red);display:none"></div>
+        <div style="font-size:11px;color:var(--text2);font-family:var(--mono)">Live prices fetched via Yahoo Finance · Prices update on page load</div>
+      </div>
+      <div class="calc-outputs">
+        <!-- Summary bar -->
+        <div class="summary-bar" id="ptSummaryBar" style="display:none">
+          <div class="sum-cell"><div class="sum-label">Total Invested</div><div class="sum-value" id="ptTotalInvested">—</div></div>
+          <div class="sum-cell"><div class="sum-label">Current Value</div><div class="sum-value green" id="ptCurrentValue">—</div></div>
+          <div class="sum-cell"><div class="sum-label">Total P&amp;L</div><div class="sum-value" id="ptTotalPnL">—</div></div>
+          <div class="sum-cell"><div class="sum-label">Overall Return</div><div class="sum-value" id="ptOverallReturn">—</div></div>
+        </div>
+        <!-- Holdings table -->
+        <div id="ptHoldingsTable" style="overflow-x:auto;margin-top:.75rem"></div>
+        <div id="ptEmpty" style="text-align:center;padding:2rem;color:var(--text2);font-size:13px">Add your first holding above to start tracking your portfolio.</div>
+      </div>
+    </div>
+
+    <!-- Asset Allocation Tab -->
+    <div id="portfolio-alloc" class="calc-inner">
+      <div class="calc-inputs">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group"><label class="form-label">Equity / Stocks (₹)</label><input class="form-input" type="number" id="allocEq" value="500000" oninput="calcAlloc()"></div>
+          <div class="form-group"><label class="form-label">Debt / FD / Bonds (₹)</label><input class="form-input" type="number" id="allocDebt" value="200000" oninput="calcAlloc()"></div>
+          <div class="form-group"><label class="form-label">Gold / SGBs (₹)</label><input class="form-input" type="number" id="allocGold" value="100000" oninput="calcAlloc()"></div>
+          <div class="form-group"><label class="form-label">Real Estate / REITs (₹)</label><input class="form-input" type="number" id="allocRE" value="0" oninput="calcAlloc()"></div>
+          <div class="form-group"><label class="form-label">Crypto (₹)</label><input class="form-input" type="number" id="allocCrypto" value="50000" oninput="calcAlloc()"></div>
+          <div class="form-group"><label class="form-label">Cash / Liquid (₹)</label><input class="form-input" type="number" id="allocCash" value="100000" oninput="calcAlloc()"></div>
+        </div>
+      </div>
+      <div class="calc-outputs">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start">
+          <div>
+            <div style="position:relative;width:100%;max-width:280px;height:280px;margin:0 auto">
+              <canvas id="allocPie" role="img" aria-label="Asset allocation pie chart showing portfolio breakdown"></canvas>
+            </div>
+            <div id="allocLegend" style="margin-top:1rem;display:flex;flex-wrap:wrap;gap:8px 16px;font-size:12px"></div>
+          </div>
+          <div>
+            <div id="allocInsights" style="font-size:13px;line-height:1.7"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Step-up SIP Visualiser (inside invest section already closed above — appended as separate panel via JS tab) ═══ -->
+<!-- Step-up SIP panel is injected into the invest calc-section via the tab below -->
+<script>
+(function(){
+  var investSection = document.querySelector('#invest .calc-section');
+  if(!investSection) return;
+  var panel = document.createElement('div');
+  panel.id = 'invest-stepup';
+  panel.className = 'calc-inner';
+  panel.innerHTML = `
+    <div class="calc-inputs">
+      <div class="form-group">
+        <label class="form-label">Monthly SIP (₹): <span id="suSIP-v" style="color:var(--blue)">₹10,000</span></label>
+        <input type="range" id="suSIP" min="1000" max="100000" step="1000" value="10000" oninput="calcStepUp()">
+        <div class="range-labels"><span>₹1K</span><span>₹1L</span></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Annual Step-Up: <span id="suStep-v" style="color:var(--green)">10%</span></label>
+        <input type="range" id="suStep" min="0" max="30" step="1" value="10" oninput="calcStepUp()">
+        <div class="range-labels"><span>0%</span><span>30%</span></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Expected Return: <span id="suRate-v" style="color:var(--blue)">12%</span></label>
+        <input type="range" id="suRate" min="6" max="20" step="0.5" value="12" oninput="calcStepUp()">
+        <div class="range-labels"><span>6%</span><span>20%</span></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Period: <span id="suYrs-v" style="color:var(--blue)">20 yrs</span></label>
+        <input type="range" id="suYrs" min="1" max="40" step="1" value="20" oninput="calcStepUp()">
+        <div class="range-labels"><span>1</span><span>40 yrs</span></div>
+      </div>
+    </div>
+    <div class="calc-outputs">
+      <div class="summary-bar" id="suSummaryBar">
+        <div class="sum-cell"><div class="sum-label">With Step-Up</div><div class="sum-value green" id="suCorpusStep">—</div></div>
+        <div class="sum-cell"><div class="sum-label">Flat SIP</div><div class="sum-value blue" id="suCorpusFlat">—</div></div>
+        <div class="sum-cell"><div class="sum-label">Extra Gain</div><div class="sum-value amber" id="suExtraGain">—</div></div>
+        <div class="sum-cell"><div class="sum-label">Total Invested</div><div class="sum-value" id="suInvested">—</div></div>
+      </div>
+      <div style="position:relative;width:100%;height:280px;margin-top:1rem">
+        <canvas id="stepUpChart" role="img" aria-label="Step-up SIP vs flat SIP corpus growth chart">Step-up SIP corpus growth comparison chart</canvas>
+      </div>
+      <div id="suInsight" style="font-size:13px;color:var(--text2);margin-top:.75rem;line-height:1.6;font-family:var(--mono)"></div>
+    </div>
+  `;
+  investSection.appendChild(panel);
+})();
+</script>
 <div id="retire" class="section">
   <div class="section-header">
     <div>
@@ -2085,6 +2203,8 @@ function showSection(id){
     if(b.getAttribute('onclick')&&b.getAttribute('onclick').includes("'"+id+"'"))b.classList.add('active');
   });
   if(id==='dashboard')renderDashboard();
+  if(id==='portfolio'){ptRender();calcAlloc();}
+  if(id==='invest')setTimeout(calcStepUp,100);
 }
 
 // ════════ CALC TABS ════════
@@ -2450,6 +2570,190 @@ function calcScenario(){
      'Even a moderate step-up significantly outperforms flat SIP over time. Crashes recover — skipping investments does not.')+'</div>';
 }
 
+// ════════ STEP-UP SIP VISUALISER ════════
+function calcStepUp(){
+  const sip=+document.getElementById('suSIP').value||10000;
+  const step=+document.getElementById('suStep').value||10;
+  const rate=+document.getElementById('suRate').value||12;
+  const yrs=+document.getElementById('suYrs').value||20;
+  document.getElementById('suSIP-v').textContent='₹'+sip.toLocaleString('en-IN');
+  document.getElementById('suStep-v').textContent=step+'%';
+  document.getElementById('suRate-v').textContent=rate+'%';
+  document.getElementById('suYrs-v').textContent=yrs+' yrs';
+  const rm=rate/100/12;
+  function flatCorpus(s,n){return s*(Math.pow(1+rm,n)-1)/rm*(1+rm);}
+  // Build year-by-year data
+  const flatData=[],stepData=[],labels=[];
+  let flatC=0,stepC=0,curSIP=sip,totalInvested=0,totalInvestedStep=0;
+  for(let y=1;y<=yrs;y++){
+    flatC=flatCorpus(sip,y*12);
+    // Step-up: grow previous corpus by 1yr return, add this year's SIP corpus
+    let yearSIP=curSIP;
+    stepC=(stepC)*Math.pow(1+rate/100,1)+flatCorpus(yearSIP,12);
+    totalInvested=sip*y*12;
+    totalInvestedStep+=yearSIP*12;
+    if(y>1)curSIP=sip*Math.pow(1+step/100,y-1);
+    labels.push('Yr '+y);
+    flatData.push(Math.round(flatC));
+    stepData.push(Math.round(stepC));
+  }
+  const finalFlat=flatData[yrs-1];
+  const finalStep=stepData[yrs-1];
+  const extraGain=finalStep-finalFlat;
+  document.getElementById('suCorpusStep').textContent=fmtC(finalStep);
+  document.getElementById('suCorpusFlat').textContent=fmtC(finalFlat);
+  document.getElementById('suExtraGain').textContent=(extraGain>=0?'+':'')+fmtC(extraGain);
+  document.getElementById('suInvested').textContent=fmtC(totalInvested);
+  document.getElementById('suInsight').textContent=
+    step===0?'No step-up applied — both lines are identical. Try increasing the annual step-up to see the power of growing your SIP every year.':
+    extraGain>0?'A '+step+'% annual step-up generates '+fmtC(extraGain)+' more ('+(((extraGain/finalFlat)*100).toFixed(0))+'% extra) over '+yrs+' years compared to a flat SIP. Time and increases compound together.':
+    'Adjust the inputs to see the step-up advantage.';
+  // Chart
+  const canvas=document.getElementById('stepUpChart');
+  if(!canvas) return;
+  if(window._stepUpChart){window._stepUpChart.destroy();}
+  if(typeof Chart==='undefined'){setTimeout(calcStepUp,400);return;}
+  window._stepUpChart=new Chart(canvas,{
+    type:'line',
+    data:{
+      labels:labels,
+      datasets:[
+        {label:'Step-Up SIP',data:stepData,borderColor:'#00C07F',backgroundColor:'rgba(0,192,127,.08)',borderWidth:2,pointRadius:0,tension:.35,fill:true},
+        {label:'Flat SIP',data:flatData,borderColor:'#3B82F6',backgroundColor:'rgba(59,130,246,.06)',borderWidth:2,pointRadius:0,tension:.35,borderDash:[5,4],fill:true}
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmtC(c.raw)}}},
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#8a9ab5',font:{size:10},maxTicksLimit:10}},
+        y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#8a9ab5',font:{size:10},callback:v=>v>=10000000?'₹'+(v/10000000).toFixed(1)+'Cr':v>=100000?'₹'+(v/100000).toFixed(0)+'L':'₹'+v}}
+      }
+    }
+  });
+}
+
+// ════════ PORTFOLIO TRACKER ════════
+let ptHoldings=[];
+try{const s=localStorage.getItem('fv_portfolio');if(s)ptHoldings=JSON.parse(s);}catch(e){}
+
+function ptSave(){try{localStorage.setItem('fv_portfolio',JSON.stringify(ptHoldings));}catch(e){}}
+
+async function ptAddHolding(){
+  const sym=(document.getElementById('ptSymbol').value||'').trim().toUpperCase();
+  const qty=parseFloat(document.getElementById('ptQty').value)||0;
+  const buy=parseFloat(document.getElementById('ptBuy').value)||0;
+  const errEl=document.getElementById('ptError');
+  if(!sym||qty<=0||buy<=0){errEl.textContent='Please enter a valid symbol, quantity and buy price.';errEl.style.display='block';return;}
+  errEl.style.display='none';
+  // Check duplicate
+  if(ptHoldings.find(h=>h.sym===sym)){errEl.textContent=sym+' already in portfolio. Remove it first to update.';errEl.style.display='block';return;}
+  ptHoldings.push({sym,qty,buy,ltp:null});
+  ptSave();
+  document.getElementById('ptSymbol').value='';
+  document.getElementById('ptQty').value='';
+  document.getElementById('ptBuy').value='';
+  await ptRefresh();
+}
+
+function ptRemove(sym){ptHoldings=ptHoldings.filter(h=>h.sym!==sym);ptSave();ptRender();}
+
+async function ptRefresh(){
+  for(let h of ptHoldings){
+    // Use Yahoo Finance via a CORS-friendly public endpoint
+    try{
+      const res=await fetch('https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(h.sym)+'?interval=1d&range=1d');
+      const data=await res.json();
+      h.ltp=data?.chart?.result?.[0]?.meta?.regularMarketPrice||null;
+    }catch(e){h.ltp=null;}
+  }
+  ptSave();
+  ptRender();
+}
+
+function ptRender(){
+  const tableEl=document.getElementById('ptHoldingsTable');
+  const emptyEl=document.getElementById('ptEmpty');
+  const summaryBar=document.getElementById('ptSummaryBar');
+  if(!ptHoldings.length){tableEl.innerHTML='';emptyEl.style.display='block';summaryBar.style.display='none';return;}
+  emptyEl.style.display='none';
+  summaryBar.style.display='grid';
+  let totalInv=0,totalCur=0;
+  const rows=ptHoldings.map(h=>{
+    const inv=h.qty*h.buy;
+    const cur=h.ltp?h.qty*h.ltp:null;
+    const pnl=cur!==null?cur-inv:null;
+    const pct=cur!==null?((cur-inv)/inv*100):null;
+    totalInv+=inv;
+    if(cur!==null)totalCur+=cur;
+    const pnlCls=pnl===null?'':pnl>=0?'green':'red';
+    return `<tr>
+      <td style="font-weight:600;font-family:var(--mono)">${h.sym}</td>
+      <td style="text-align:right">${h.qty.toLocaleString('en-IN')}</td>
+      <td style="text-align:right">${fmtC(h.buy)}</td>
+      <td style="text-align:right;color:var(--blue)">${h.ltp?fmtC(h.ltp):'—'}</td>
+      <td style="text-align:right">${fmtC(inv)}</td>
+      <td style="text-align:right;color:var(--${pnlCls})">${pnl!==null?fmtC(pnl):'—'}</td>
+      <td style="text-align:right;color:var(--${pnlCls})">${pct!==null?(pct>=0?'+':'')+pct.toFixed(2)+'%':'—'}</td>
+      <td style="text-align:center"><button onclick="ptRemove('${h.sym}')" style="background:none;border:1px solid var(--border2);color:var(--red);font-size:10px;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:var(--sans)">✕</button></td>
+    </tr>`;
+  }).join('');
+  tableEl.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr style="border-bottom:1px solid var(--border2);color:var(--text2);text-align:right">
+      <th style="text-align:left;padding:6px 8px">Symbol</th><th style="padding:6px 8px">Qty</th><th style="padding:6px 8px">Avg Buy</th><th style="padding:6px 8px">LTP</th><th style="padding:6px 8px">Invested</th><th style="padding:6px 8px">P&L</th><th style="padding:6px 8px">Return</th><th style="padding:6px 8px"></th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+  const totalPnL=totalCur-totalInv;
+  const overallRet=totalInv>0?(totalPnL/totalInv*100):0;
+  document.getElementById('ptTotalInvested').textContent=fmtC(totalInv);
+  document.getElementById('ptCurrentValue').textContent=fmtC(totalCur||totalInv);
+  const pnlEl=document.getElementById('ptTotalPnL');
+  pnlEl.textContent=fmtC(totalPnL);pnlEl.style.color=totalPnL>=0?'var(--green)':'var(--red)';
+  const retEl=document.getElementById('ptOverallReturn');
+  retEl.textContent=(overallRet>=0?'+':'')+overallRet.toFixed(2)+'%';retEl.style.color=overallRet>=0?'var(--green)':'var(--red)';
+}
+
+// ════════ ASSET ALLOCATION PIE ════════
+let _allocChart=null;
+function calcAlloc(){
+  const vals=[
+    {label:'Equity',val:+document.getElementById('allocEq').value||0,color:'#3B82F6'},
+    {label:'Debt/FD',val:+document.getElementById('allocDebt').value||0,color:'#10B981'},
+    {label:'Gold',val:+document.getElementById('allocGold').value||0,color:'#F59E0B'},
+    {label:'Real Estate',val:+document.getElementById('allocRE').value||0,color:'#8B5CF6'},
+    {label:'Crypto',val:+document.getElementById('allocCrypto').value||0,color:'#EF4444'},
+    {label:'Cash',val:+document.getElementById('allocCash').value||0,color:'#6B7280'},
+  ].filter(v=>v.val>0);
+  const total=vals.reduce((s,v)=>s+v.val,0);
+  if(!total)return;
+  const canvas=document.getElementById('allocPie');
+  if(!canvas)return;
+  if(_allocChart){_allocChart.destroy();}
+  if(typeof Chart==='undefined'){setTimeout(calcAlloc,400);return;}
+  _allocChart=new Chart(canvas,{
+    type:'doughnut',
+    data:{labels:vals.map(v=>v.label),datasets:[{data:vals.map(v=>v.val),backgroundColor:vals.map(v=>v.color),borderWidth:2,borderColor:'rgba(8,13,24,.8)'}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.label+': '+fmtC(c.raw)+' ('+((c.raw/total)*100).toFixed(1)+'%)'}}},cutout:'62%'}
+  });
+  // Legend
+  document.getElementById('allocLegend').innerHTML=vals.map(v=>`<span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:2px;background:${v.color};flex-shrink:0"></span><span style="color:var(--text2)">${v.label} ${((v.val/total)*100).toFixed(1)}%</span></span>`).join('');
+  // Insights
+  const eq=vals.find(v=>v.label==='Equity');const debt=vals.find(v=>v.label==='Debt/FD');
+  const eqPct=eq?(eq.val/total*100):0;const debtPct=debt?(debt.val/total*100):0;
+  const crypto=vals.find(v=>v.label==='Crypto');const cryptoPct=crypto?(crypto.val/total*100):0;
+  const gold=vals.find(v=>v.label==='Gold');const goldPct=gold?(gold.val/total*100):0;
+  const tips=[];
+  if(eqPct<40)tips.push('⚠ Equity allocation is '+eqPct.toFixed(0)+'% — consider increasing to 50-70% for long-term growth.');
+  else if(eqPct>80)tips.push('⚠ Equity is '+eqPct.toFixed(0)+'% — highly aggressive. Add debt/gold for stability.');
+  else tips.push('✓ Equity allocation looks balanced at '+eqPct.toFixed(0)+'%.');
+  if(debtPct<10)tips.push('⚠ Low debt allocation — hold at least 20-30% in FDs/bonds for stability.');
+  if(cryptoPct>10)tips.push('⚠ Crypto is '+cryptoPct.toFixed(0)+'% of portfolio — high risk. Keep below 5-10%.');
+  if(goldPct<5)tips.push('• Consider adding gold (5-10%) as an inflation hedge and portfolio stabiliser.');
+  else tips.push('✓ Gold allocation at '+goldPct.toFixed(0)+'% — good hedge.');
+  document.getElementById('allocInsights').innerHTML='<div style="font-weight:500;margin-bottom:.5rem;font-size:14px">Rebalancing Insights</div>'+tips.map(t=>'<div style="margin:.4rem 0;color:var(--text2)">'+t+'</div>').join('')+'<div style="margin-top:1rem;font-size:11px;color:var(--muted);font-family:var(--mono)">Total portfolio: '+fmtC(total)+'</div>';
+}
+
 // ════════ PROFILE ════════
 let userProfile={};
 function saveProfile(){
@@ -2515,6 +2819,13 @@ document.addEventListener('DOMContentLoaded',()=>{
   calcCrash();calcStopLoss();calcPortfolio();
   calcEMI();calcPrepay();calcTax();calcCG();calcHealth();
   loadProfile();
+  // Step-up SIP — delayed so injected canvas is in DOM
+  setTimeout(calcStepUp, 300);
+  // Asset allocation — init with default values
+  setTimeout(calcAlloc, 300);
+  // Portfolio — render any saved holdings from localStorage
+  ptRender();
+  if(ptHoldings.length) ptRefresh();
   // Activate first signal
   const first=document.querySelector('.js-sig-item');
   if(first){first.classList.add('active');const key=first.dataset.asset;const det=document.getElementById('det-'+key);if(det)det.classList.add('active');}
