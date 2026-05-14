@@ -304,6 +304,48 @@ def fetch_stocks():
             data["gold_silver_ratio"] = None
     except Exception:
         data["gold_silver_ratio"] = None
+
+    # ── Long-horizon instruments: Midcap index + Indian ETFs ──────────
+    for ticker, key in [
+        ("^NSMIDCP",     "nifty_midcap"),   # Nifty Midcap 150 index
+        ("GOLDBEES.NS",  "gold_etf"),        # Nippon India Gold ETF (NSE)
+        ("SILVERBEES.NS","silver_etf"),      # Nippon India Silver ETF (NSE)
+        ("MO_N100.NS",   "nasdaq_india"),    # Motilal Oswal NASDAQ 100 ETF
+    ]:
+        try:
+            hist = yf.Ticker(ticker).history(period="12mo")
+            if hist.empty:
+                data[key] = None
+                continue
+            closes  = hist["Close"]
+            price   = float(closes.iloc[-1])
+            prev    = float(closes.iloc[-2])
+            chg     = (price - prev) / prev * 100
+            ma50    = float(closes.iloc[-50:].mean())  if len(closes) >= 50  else float(closes.mean())
+            ma200   = float(closes.iloc[-200:].mean()) if len(closes) >= 200 else float(closes.mean())
+            above_200 = price > ma200
+            # Wilder's RSI
+            delta  = closes.diff()
+            gain_s = delta.clip(lower=0)
+            loss_s = (-delta.clip(upper=0))
+            gain   = gain_s.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
+            loss   = loss_s.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
+            rsi    = float((100 - 100 / (1 + gain / loss)).iloc[-1])
+            # 52-week high/low for context
+            high52 = float(closes.max())
+            low52  = float(closes.min())
+            below_52wk_high = (high52 - price) / high52 * 100
+            data[key] = {
+                "price": price, "chg": chg,
+                "ma50": ma50,   "ma200": ma200,
+                "above_200": above_200, "rsi": rsi,
+                "high52": high52, "low52": low52,
+                "below_52wk_high": below_52wk_high,
+            }
+        except Exception as e:
+            print(f"  ⚠ {ticker} failed: {e}")
+            data[key] = None
+
     return data
 
 # ─────────────────────────────────────────────────────────────
@@ -579,6 +621,479 @@ def sig_fd():
     return {"signal":s,"cls":c,"reasons":reasons,"metrics":metrics,
             "source":"Public bank disclosures + RBI policy","context":"FDs are taxable — for high earners, tax-free bonds or PPF may give better post-tax returns. Note: Debt MFs purchased after April 1, 2023 are taxed at slab rates (indexation benefit removed), making them similar to FDs for tax purposes."}
 
+def sig_midcap(stocks):
+    """Buy/Hold/Wait signal for Nifty Midcap 150 — 5–10yr horizon focus."""
+    mc = stocks.get("nifty_midcap")
+    if not mc:
+        return {"signal":"HOLD","cls":"hold",
+                "reasons":["Nifty Midcap 150 (^NSMIDCP) data unavailable — yfinance fetch failed"],
+                "metrics":{},"source":"Yahoo Finance (^NSMIDCP)",
+                "context":"Add ^NSMIDCP to fetch_stocks() and retry."}
+    price       = mc["price"]
+    rsi         = mc["rsi"]
+    ab50        = price > mc["ma50"]
+    ab200       = mc.get("above_200", True)
+    chg         = mc["chg"]
+    below_52wk  = mc.get("below_52wk_high", 0)
+
+    if not ab50 and not ab200:
+        s, c = "BUY", "buy"
+        reasons = [
+            "Midcap 150 below both 50 & 200-day MAs — deep correction, historically excellent 5–7yr entry",
+            "Midcap corrections of 15–25% are normal cycles; 15yr CAGR ~14% despite volatility",
+            "Deploy in 3–4 tranches over 4–6 weeks — never lump-sum in one shot",
+        ]
+    elif not ab50:
+        s, c = "BUY", "buy"
+        reasons = [
+            "Midcap 150 below 50-day MA — pullback zone, increase SIP allocation now",
+            "5–7yr horizon: corrections are entry opportunities, not exit signals",
+        ]
+    elif rsi > 72:
+        s, c = "WAIT", "wait"
+        reasons = [
+            f"Midcap RSI = {rsi:.0f} — overbought. Pause lump-sum, continue monthly SIP only",
+            "Wait for RSI to cool below 60 before deploying extra capital",
+        ]
+    else:
+        s, c = "HOLD", "hold"
+        reasons = [
+            "Nifty Midcap 150 in healthy uptrend — continue monthly SIP",
+            "Don't time midcap. 5yr+ horizon = any dip is a buying opportunity.",
+        ]
+
+    if below_52wk > 20:
+        reasons.append(f"{below_52wk:.1f}% below 52-week high — value zone for long-term accumulation")
+    if chg < -2:
+        reasons.append(f"Today -{abs(chg):.1f}% — short-term dip, good for long-term SIP investors")
+    reasons += [
+        "Recommended: Motilal Oswal Nifty Midcap 150 Index Fund | Nippon India Nifty Midcap 150 Index Fund",
+        "Ideal allocation: 15–20% of equity portfolio for a 5–10yr horizon",
+    ]
+
+    metrics = {
+        "Nifty Midcap 150":    f"{price:,.0f}  ({pct(chg)} today)",
+        "50-Day MA":           f"{mc['ma50']:,.0f}  ({'above' if ab50 else 'below'})",
+        "200-Day MA":          f"{mc['ma200']:,.0f}  ({'above' if ab200 else 'below'})",
+        "RSI (14)":            f"{rsi:.1f}  ({'Overbought' if rsi > 70 else 'Oversold' if rsi < 40 else 'Neutral'})",
+        "Below 52-wk High":    f"{below_52wk:.1f}%",
+        "Historical CAGR":     "~14% (15yr avg, past performance not guaranteed)",
+        "Volatility vs Nifty": "2–3× higher — size positions smaller than large-cap",
+    }
+    return {
+        "signal": s, "cls": c, "reasons": reasons, "metrics": metrics,
+        "source": "Yahoo Finance (^NSMIDCP)",
+        "context": "Midcap is a 5–10yr game. Never check it daily. SIP every month, rebalance once a year.",
+    }
+
+
+def sig_ppf_nps_elss():
+    """Signal for long-term tax-saving & guaranteed instruments: PPF, NPS, ELSS."""
+    direction = "cutting" if REPO_RATE < PREV_REPO else "hiking" if REPO_RATE > PREV_REPO else "stable"
+
+    PPF_RATE    = 7.1    # update quarterly at finmin.nic.in
+    NPS_EQ_RET  = 10.5   # NPS Equity Tier-I historical avg CAGR
+    ELSS_CAGR   = 12.0   # ELSS category avg 5yr CAGR (market-linked)
+    INFLATION   = 5.0    # approx CPI inflation
+    ppf_real    = PPF_RATE - INFLATION
+
+    s, c = "BUY", "buy"
+    reasons = [
+        f"PPF at {PPF_RATE}% is guaranteed, fully tax-free (EEE status) — best risk-free long-term option",
+        "NPS Tier-1: extra ₹50,000 deduction under 80CCD(1B) beyond the ₹1.5L 80C limit — never skip it",
+        "ELSS: shortest 3yr lock-in for equity MF with 80C benefit (₹1.5L annual limit shared with PPF)",
+        "Priority order: max PPF ₹1.5L/yr → NPS extra ₹50K → ELSS for remaining 80C → index SIP",
+        "PPF partial withdrawal allowed from year 7 — not fully illiquid for 15 years",
+    ]
+    if direction == "cutting":
+        reasons.insert(0,
+            "RBI in rate-cutting cycle → PPF rate may be cut in next quarterly review. Lock in contributions now.")
+    elif direction == "hiking":
+        reasons.insert(0,
+            "RBI hiking rates → PPF rate may rise next quarter. Split between PPF and high-yield FDs this quarter.")
+
+    pt10 = PPF_RATE * (1 - 0.10)
+    pt30 = PPF_RATE * (1 - 0.30)
+    metrics = {
+        "PPF rate":             f"{PPF_RATE}% p.a. (tax-free, guaranteed by Govt of India)",
+        "PPF real return":      f"{ppf_real:.1f}% after {INFLATION:.0f}% inflation",
+        "PPF lock-in":          "15 years (partial withdrawal after year 7)",
+        "PPF contribution limit":"₹1,50,000 per financial year (min ₹500)",
+        "NPS equity CAGR":      f"~{NPS_EQ_RET}% historical (market-linked, not guaranteed)",
+        "NPS 80CCD(1B) extra":  "₹50,000 deduction — separate from 80C. Use it every year.",
+        "ELSS avg CAGR (5yr)":  f"~{ELSS_CAGR}% (market-linked, no guarantee)",
+        "80C combined limit":   "₹1.5L/yr (ELSS + PPF + NPS + other 80C instruments combined)",
+        "Tax status (PPF)":     "EEE — invest exempt, interest exempt, maturity exempt",
+        "FD equivalent yield":  f"PPF {PPF_RATE}% = FD {PPF_RATE/(1-0.30):.2f}% pre-tax (30% slab)",
+    }
+    return {
+        "signal": s, "cls": c, "reasons": reasons, "metrics": metrics,
+        "source": "Finmin (PPF) · PFRDA (NPS) · SEBI (ELSS)",
+        "context": (
+            "For a 10yr horizon: max PPF every year > NPS 80CCD(1B) > ELSS SIP. "
+            "PPF at 7.1% tax-free = a taxable FD at 10.1% for someone in the 30% slab. "
+            "Never skip PPF — tax-free compounding is the most underrated wealth tool in India."
+        ),
+    }
+
+
+# ─────────────────────────────────────────────────────────────
+# LONG-TERM PORTFOLIO UTILITIES
+# ─────────────────────────────────────────────────────────────
+
+def portfolio_allocation(age=30, risk="moderate"):
+    """Return suggested % allocation for a 5–10yr horizon by age + risk profile.
+
+    Keys returned:
+        eq_india    — Indian equities (Nifty 50 + Next 50 + Midcap 150)
+        eq_us       — US equities (S&P 500 / Nasdaq 100 via Indian ETF)
+        gold        — Gold (SGB preferred; ETF if SGB tranche unavailable)
+        ppf_nps     — PPF / NPS / ELSS (tax-saving long-duration instruments)
+        crypto      — Crypto (BTC + ETH only; 0 for conservative)
+        fd_liquid   — FD / liquid fund (emergency buffer, NOT part of growth corpus)
+    """
+    base = {
+        "moderate": {
+            "eq_india": 40, "eq_us": 15, "gold": 10,
+            "ppf_nps":  20, "crypto": 5,  "fd_liquid": 10,
+        },
+        "aggressive": {
+            "eq_india": 50, "eq_us": 20, "gold": 5,
+            "ppf_nps":  15, "crypto": 10, "fd_liquid": 0,
+        },
+        "conservative": {
+            "eq_india": 25, "eq_us": 10, "gold": 15,
+            "ppf_nps":  30, "crypto": 0,  "fd_liquid": 20,
+        },
+    }
+    alloc = base.get(risk, base["moderate"]).copy()
+    # Age glide-path: reduce equity 1% per year above 35, shift to PPF/NPS (debt)
+    if age > 35:
+        shift = min((age - 35) * 1, 20)
+        alloc["eq_india"] = max(alloc["eq_india"] - shift, 20)
+        alloc["ppf_nps"]  = alloc["ppf_nps"] + shift
+    # Ensure total stays at 100
+    total = sum(alloc.values())
+    if total != 100:
+        alloc["fd_liquid"] += (100 - total)
+    return alloc
+
+
+def sip_projection(monthly_inr, annual_rate_pct, years):
+    """Compute future value of a monthly SIP using compound interest.
+
+    Returns:
+        future_value  — corpus at end of tenure
+        invested      — total capital deployed
+        gain          — wealth created (future_value - invested)
+        cagr          — assumed annual return %
+        years         — tenure
+        monthly       — monthly SIP amount
+        inflation_adj — real value at 5% inflation (approximate)
+    """
+    r = annual_rate_pct / 100 / 12   # monthly rate
+    n = years * 12                   # total months
+    if r == 0:
+        fv = monthly_inr * n
+    else:
+        fv = monthly_inr * ((((1 + r) ** n) - 1) / r) * (1 + r)
+    invested = monthly_inr * n
+    gain     = fv - invested
+    # Real (inflation-adjusted) value at 5% p.a. inflation
+    real_fv  = fv / ((1 + 0.05) ** years)
+    return {
+        "future_value":  fv,
+        "invested":      invested,
+        "gain":          gain,
+        "cagr":          annual_rate_pct,
+        "years":         years,
+        "monthly":       monthly_inr,
+        "inflation_adj": real_fv,
+    }
+
+
+
+# ── Long-Term Portfolio Builder static HTML template ─────────
+# Uses __LT_TILES__, __LT_ALLOC__, __LT_PROJ__ placeholders —
+# substituted at runtime; this is a plain string so CSS/JS {}
+# braces do not need escaping.
+_LT_BUILDER_TEMPLATE = """
+<div class="lt-builder-section" id="lt-portfolio">
+  <div class="lt-section-head">
+    <span class="lt-section-label">Long-Term Portfolio Builder &#8212; 5 to 10 Year Horizon</span>
+    <span class="lt-section-note">Baked at generation time &middot; Adjust with interactive sliders below</span>
+  </div>
+
+  <!-- Live instrument tiles -->
+  <div class="lt-tiles">__LT_TILES__</div>
+
+  <!-- Allocation bars -->
+  <div class="lt-card">
+    <div class="lt-card-head">
+      Recommended allocation &#8212; moderate risk, age 30
+      <span class="lt-profile-pills">
+        <button class="lt-pill active" onclick="ltSetProfile('moderate',this)">Moderate</button>
+        <button class="lt-pill" onclick="ltSetProfile('aggressive',this)">Aggressive</button>
+        <button class="lt-pill" onclick="ltSetProfile('conservative',this)">Conservative</button>
+      </span>
+    </div>
+    <div id="lt-alloc-bars">__LT_ALLOC__</div>
+    <div class="lt-age-row">
+      <label class="lt-age-label">Your age: <span id="lt-age-out">30</span></label>
+      <input type="range" min="20" max="60" value="30" id="lt-age-slider" oninput="ltUpdateAge(this.value)" style="flex:1;margin:0 10px">
+      <span class="lt-age-note">Allocation shifts toward debt after age 35 (glide path)</span>
+    </div>
+  </div>
+
+  <!-- SIP projection table -->
+  <div class="lt-card" style="margin-top:1rem">
+    <div class="lt-card-head">SIP projections &#8212; indicative corpus at 10 years</div>
+    <div style="overflow-x:auto">__LT_PROJ__</div>
+    <div class="lt-disclaimer">Projections are illustrative only. Returns not guaranteed. Equity returns highly variable. Past performance is not indicative of future results.</div>
+  </div>
+
+  <!-- Interactive SIP calculator -->
+  <div class="lt-card" style="margin-top:1rem">
+    <div class="lt-card-head">Interactive SIP projector</div>
+    <div class="lt-sip-grid">
+      <div class="lt-sip-inputs">
+        <div class="lt-sip-row"><label class="lt-sip-label">Monthly SIP (&#8377;)</label><input type="range" min="1000" max="200000" step="1000" value="10000" id="lt-sip-amt" oninput="ltCalcSip()"><span class="lt-sip-val" id="lt-sip-amt-v">&#8377;10,000</span></div>
+        <div class="lt-sip-row"><label class="lt-sip-label">Expected return (% p.a.)</label><input type="range" min="6" max="18" step="0.5" value="12" id="lt-sip-rate" oninput="ltCalcSip()"><span class="lt-sip-val" id="lt-sip-rate-v">12%</span></div>
+        <div class="lt-sip-row"><label class="lt-sip-label">Horizon (years)</label><input type="range" min="3" max="15" step="1" value="7" id="lt-sip-yrs" oninput="ltCalcSip()"><span class="lt-sip-val" id="lt-sip-yrs-v">7 yrs</span></div>
+        <div class="lt-sip-row"><label class="lt-sip-label">Inflation rate (%)</label><input type="range" min="3" max="9" step="0.5" value="5" id="lt-sip-infl" oninput="ltCalcSip()"><span class="lt-sip-val" id="lt-sip-infl-v">5%</span></div>
+      </div>
+      <div class="lt-sip-results">
+        <div class="lt-res-cell"><div class="lt-res-val" id="lt-res-fv">&#8212;</div><div class="lt-res-lbl">Maturity corpus</div></div>
+        <div class="lt-res-cell"><div class="lt-res-val" id="lt-res-inv">&#8212;</div><div class="lt-res-lbl">Total invested</div></div>
+        <div class="lt-res-cell"><div class="lt-res-val green" id="lt-res-gain">&#8212;</div><div class="lt-res-lbl">Wealth created</div></div>
+        <div class="lt-res-cell"><div class="lt-res-val amber" id="lt-res-real">&#8212;</div><div class="lt-res-lbl">Real value (inflation-adj.)</div></div>
+      </div>
+    </div>
+    <!-- Benchmark rows -->
+    <div class="lt-benchmarks">
+      <div class="lt-bm-label">Benchmark returns (historical, not guaranteed)</div>
+      <div class="lt-bm-row"><span>PPF (guaranteed)</span><span class="mono green">7.1%</span></div>
+      <div class="lt-bm-row"><span>Fixed Deposit (large bank)</span><span class="mono">7.0&#8211;7.5%</span></div>
+      <div class="lt-bm-row"><span>Nifty 50 index (15yr CAGR)</span><span class="mono green">~12%</span></div>
+      <div class="lt-bm-row"><span>Nifty Midcap 150 (15yr CAGR)</span><span class="mono green">~14%</span></div>
+      <div class="lt-bm-row"><span>US S&amp;P 500 via Indian ETF</span><span class="mono">~11%</span></div>
+      <div class="lt-bm-row"><span>Gold (SGB, 8yr)</span><span class="mono amber">~8%</span></div>
+    </div>
+  </div>
+
+  <!-- Rebalancing rules -->
+  <div class="lt-card" style="margin-top:1rem">
+    <div class="lt-card-head">Portfolio rebalancing rules (5&#8211;10yr strategy)</div>
+    <div class="lt-rules">
+      <div class="lt-rule"><span class="lt-rule-marker green">1</span><span>Review allocation <strong>quarterly</strong> &#8212; not daily. Long-term portfolios hurt by over-trading.</span></div>
+      <div class="lt-rule"><span class="lt-rule-marker amber">2</span><span>Trigger rebalance if any asset drifts <strong>&gt;5%</strong> from target (e.g. equity goes from 40% to 46%).</span></div>
+      <div class="lt-rule"><span class="lt-rule-marker amber">3</span><span>Use <strong>new SIP money</strong> to rebalance first &#8212; avoids triggering capital gains tax.</span></div>
+      <div class="lt-rule"><span class="lt-rule-marker red">4</span><span>Full sell-and-rebalance only when drift <strong>&gt;10%</strong> and SIP top-up is insufficient.</span></div>
+      <div class="lt-rule"><span class="lt-rule-marker green">5</span><span>After age 40: each year shift 1&#8211;2% from equity to PPF/NPS (age glide path).</span></div>
+    </div>
+  </div>
+</div>
+
+<style>
+.lt-builder-section{padding:1.5rem;border-top:1px solid var(--border)}
+.lt-section-head{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1.2rem}
+.lt-section-label{font-size:13px;font-weight:700;letter-spacing:.04em;color:#fff;text-transform:uppercase}
+.lt-section-note{font-size:10px;color:var(--muted);font-family:var(--mono)}
+.lt-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:4px;overflow:hidden;margin-bottom:1rem}
+.lt-tile{background:var(--surface);padding:.85rem 1rem}
+.lt-tile-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--label);margin-bottom:4px}
+.lt-tile-val{font-family:var(--mono);font-size:15px;font-weight:600;color:#fff}
+.lt-tile-chg{font-family:var(--mono);font-size:10px;margin-top:2px}
+.lt-card{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:1rem 1.2rem}
+.lt-card-head{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text2);margin-bottom:.9rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem}
+.lt-profile-pills{display:flex;gap:4px}
+.lt-pill{background:var(--bg);border:1px solid var(--border2);border-radius:2px;color:var(--text2);font-size:10px;font-weight:600;padding:3px 9px;cursor:pointer;font-family:var(--sans);transition:all .12s}
+.lt-pill.active{background:var(--blue-dim);color:var(--blue);border-color:rgba(26,107,255,.4)}
+.lt-alloc-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+.lt-alloc-label{font-size:11px;color:var(--text2);min-width:220px;flex-shrink:0}
+.lt-alloc-bar-wrap{flex:1;background:var(--bg);border-radius:2px;height:6px;overflow:hidden}
+.lt-alloc-bar{height:6px;border-radius:2px;transition:width .4s ease}
+.lt-alloc-pct{font-family:var(--mono);font-size:11px;color:var(--text2);min-width:36px;text-align:right}
+.lt-age-row{display:flex;align-items:center;gap:8px;margin-top:1rem;padding-top:.75rem;border-top:1px solid var(--border)}
+.lt-age-label{font-size:11px;color:var(--text2);white-space:nowrap;min-width:90px}
+.lt-age-note{font-size:10px;color:var(--muted);white-space:nowrap}
+.lt-table{width:100%;border-collapse:collapse;font-size:11px;min-width:520px}
+.lt-th{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--label);padding:6px 10px;border-bottom:1px solid var(--border);text-align:left;background:var(--bg2)}
+.lt-td{padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text2)}
+.lt-td.mono{font-family:var(--mono);color:#fff}
+.lt-td.green{color:var(--green)}
+.lt-td.amber{color:var(--amber)}
+.lt-disclaimer{font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:.7rem;line-height:1.6}
+.lt-sip-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+@media(max-width:700px){.lt-sip-grid{grid-template-columns:1fr}}
+.lt-sip-inputs{display:flex;flex-direction:column;gap:12px}
+.lt-sip-row{display:flex;flex-direction:column;gap:4px}
+.lt-sip-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text2)}
+.lt-sip-val{font-family:var(--mono);font-size:12px;color:var(--blue);margin-top:2px}
+.lt-sip-results{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:4px;overflow:hidden;align-self:start;margin-top:0}
+.lt-res-cell{background:var(--surface);padding:.85rem 1rem}
+.lt-res-val{font-family:var(--mono);font-size:18px;font-weight:600;color:#fff}
+.lt-res-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--label);margin-top:3px}
+.lt-benchmarks{margin-top:1rem;padding-top:.75rem;border-top:1px solid var(--border)}
+.lt-bm-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text2);margin-bottom:.5rem}
+.lt-bm-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2)}
+.lt-bm-row:last-child{border-bottom:none}
+.lt-rules{display:flex;flex-direction:column;gap:0}
+.lt-rule{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.55}
+.lt-rule:last-child{border-bottom:none}
+.lt-rule-marker{min-width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;margin-top:1px}
+.lt-rule-marker.green{background:var(--green-dim);color:var(--green)}
+.lt-rule-marker.amber{background:var(--amber-dim);color:var(--amber)}
+.lt-rule-marker.red{background:var(--red-dim);color:var(--red)}
+</style>
+
+<script>
+var LT_PROFILES={
+  moderate:[['Indian equities (Nifty 50 + Next 50 + Midcap)',40,'#3B82F6'],['US equities (S&P 500 / Nasdaq via Indian ETF)',15,'#10B981'],['Gold (SGB preferred, ETF if SGB unavailable)',10,'#F59E0B'],['PPF / NPS / ELSS',20,'#8B5CF6'],['Crypto — BTC + ETH only',5,'#EF4444'],['FD / Liquid fund (emergency buffer)',10,'#6B7280']],
+  aggressive:[['Indian equities (Nifty 50 + Next 50 + Midcap)',50,'#3B82F6'],['US equities (S&P 500 / Nasdaq via Indian ETF)',20,'#10B981'],['Gold (SGB preferred, ETF if SGB unavailable)',5,'#F59E0B'],['PPF / NPS / ELSS',15,'#8B5CF6'],['Crypto — BTC + ETH only',10,'#EF4444'],['FD / Liquid fund (emergency buffer)',0,'#6B7280']],
+  conservative:[['Indian equities (Nifty 50 + Next 50 + Midcap)',25,'#3B82F6'],['US equities (S&P 500 / Nasdaq via Indian ETF)',10,'#10B981'],['Gold (SGB preferred, ETF if SGB unavailable)',15,'#F59E0B'],['PPF / NPS / ELSS',30,'#8B5CF6'],['Crypto — BTC + ETH only',0,'#EF4444'],['FD / Liquid fund (emergency buffer)',20,'#6B7280']]
+};
+var _ltProfile='moderate';
+function ltSetProfile(p,btn){
+  _ltProfile=p;
+  document.querySelectorAll('.lt-pill').forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
+  ltRenderBars(+document.getElementById('lt-age-slider').value);
+}
+function ltRenderBars(age){
+  var base=LT_PROFILES[_ltProfile].map(function(r){return[r[0],r[1],r[2]];});
+  if(age>35){var shift=Math.min(age-35,20);base[0][1]=Math.max(base[0][1]-shift,20);base[3][1]=base[3][1]+shift;}
+  var total=base.reduce(function(s,r){return s+r[1];},0);
+  var scale=total!==100?100/total:1;
+  var wrap=document.getElementById('lt-alloc-bars');
+  if(!wrap)return;
+  wrap.innerHTML=base.map(function(r){
+    var p=Math.round(r[1]*scale);
+    return '<div class="lt-alloc-row"><div class="lt-alloc-label">'+r[0]+'</div><div class="lt-alloc-bar-wrap"><div class="lt-alloc-bar" style="width:'+p+'%;background:'+r[2]+'"></div></div><div class="lt-alloc-pct">'+p+'%</div></div>';
+  }).join('');
+}
+function ltUpdateAge(v){
+  document.getElementById('lt-age-out').textContent=v;
+  ltRenderBars(+v);
+}
+function ltFmtInr(v){
+  if(v>=1e7)return'\u20b9'+(v/1e7).toFixed(2)+' Cr';
+  if(v>=1e5)return'\u20b9'+(v/1e5).toFixed(1)+' L';
+  return'\u20b9'+Math.round(v).toLocaleString('en-IN');
+}
+function ltCalcSip(){
+  var m=+document.getElementById('lt-sip-amt').value;
+  var rate=+document.getElementById('lt-sip-rate').value;
+  var yrs=+document.getElementById('lt-sip-yrs').value;
+  var infl=+document.getElementById('lt-sip-infl').value;
+  document.getElementById('lt-sip-amt-v').textContent='\u20b9'+m.toLocaleString('en-IN');
+  document.getElementById('lt-sip-rate-v').textContent=rate.toFixed(1)+'%';
+  document.getElementById('lt-sip-yrs-v').textContent=yrs+' yrs';
+  document.getElementById('lt-sip-infl-v').textContent=infl.toFixed(1)+'%';
+  var r=rate/100/12,n=yrs*12;
+  var fv=r>0?m*(((Math.pow(1+r,n)-1)/r)*(1+r)):m*n;
+  var inv=m*n;
+  var real=fv/Math.pow(1+infl/100,yrs);
+  document.getElementById('lt-res-fv').textContent=ltFmtInr(fv);
+  document.getElementById('lt-res-inv').textContent=ltFmtInr(inv);
+  document.getElementById('lt-res-gain').textContent=ltFmtInr(fv-inv);
+  document.getElementById('lt-res-real').textContent=ltFmtInr(real);
+}
+document.addEventListener('DOMContentLoaded',function(){ltCalcSip();ltRenderBars(30);});
+</script>
+"""
+
+
+def render_portfolio_builder(stocks_data):
+    """Generate the baked-in Long-Term Portfolio Builder HTML section.
+    Produces a static snapshot of allocations + SIP projections at generation time.
+    The interactive sliders are pure JS — no server round-trip needed.
+    """
+    mc = stocks_data.get("nifty_midcap") or {}
+    ni = stocks_data.get("nasdaq_india") or {}
+    ge = stocks_data.get("gold_etf")     or {}
+
+    # ── Live price tiles for long-horizon instruments ──────────
+    def _tile(label, data_dict):
+        if not data_dict or not data_dict.get("price"):
+            return (
+                '<div class="lt-tile">'
+                f'<div class="lt-tile-label">{label}</div>'
+                '<div class="lt-tile-val" style="color:var(--muted)">N/A</div>'
+                '</div>'
+            )
+        p     = data_dict["price"]
+        chg   = data_dict.get("chg", 0)
+        cls   = "chg-up" if chg >= 0 else "chg-dn"
+        arrow = "▲" if chg >= 0 else "▼"
+        return (
+            '<div class="lt-tile">'
+            f'<div class="lt-tile-label">{label}</div>'
+            f'<div class="lt-tile-val">&#8377;{p:,.2f}</div>'
+            f'<div class="lt-tile-chg {cls}">{arrow} {abs(chg):.2f}%</div>'
+            '</div>'
+        )
+
+    tiles_html = _tile("Nifty Midcap 150", mc) + _tile("GOLDBEES (NSE)", ge) + _tile("MO NASDAQ 100", ni)
+
+    # ── Allocation bars (moderate, age 30 — default baked in) ─
+    alloc = portfolio_allocation(age=30, risk="moderate")
+    alloc_items = [
+        ("Indian equities (Nifty 50 + Next 50 + Midcap)", alloc["eq_india"], "#3B82F6"),
+        ("US equities (S&amp;P 500 / Nasdaq via Indian ETF)", alloc["eq_us"],  "#10B981"),
+        ("Gold (SGB preferred, ETF if SGB unavailable)",   alloc["gold"],     "#F59E0B"),
+        ("PPF / NPS / ELSS (tax-saving, guaranteed)",      alloc["ppf_nps"],  "#8B5CF6"),
+        ("Crypto &#8212; BTC + ETH only",                  alloc["crypto"],   "#EF4444"),
+        ("FD / Liquid fund (emergency buffer)",             alloc["fd_liquid"],"#6B7280"),
+    ]
+    alloc_html = ""
+    for label, pct_val, color in alloc_items:
+        alloc_html += (
+            '<div class="lt-alloc-row">'
+            f'<div class="lt-alloc-label">{label}</div>'
+            '<div class="lt-alloc-bar-wrap">'
+            f'<div class="lt-alloc-bar" style="width:{pct_val}%;background:{color}"></div>'
+            '</div>'
+            f'<div class="lt-alloc-pct">{pct_val}%</div>'
+            '</div>'
+        )
+
+    # ── SIP projection table (10yr at each asset's benchmark rate) ─
+    def _proj_row(label, monthly, rate, years=10):
+        p = sip_projection(monthly, rate, years)
+        return (
+            '<tr>'
+            f'<td class="lt-td">{label}</td>'
+            f'<td class="lt-td mono">&#8377;{monthly:,.0f}/mo</td>'
+            f'<td class="lt-td mono green">{inr_fmt(p["future_value"])}</td>'
+            f'<td class="lt-td mono">{inr_fmt(p["invested"])}</td>'
+            f'<td class="lt-td mono amber">{inr_fmt(p["inflation_adj"])}</td>'
+            '</tr>'
+        )
+
+    proj_html = (
+        '<table class="lt-table">'
+        '<thead><tr>'
+        '<th class="lt-th">Asset class</th>'
+        '<th class="lt-th">Monthly SIP</th>'
+        '<th class="lt-th">10yr corpus</th>'
+        '<th class="lt-th">Total invested</th>'
+        '<th class="lt-th">Real value (5% inflation)</th>'
+        '</tr></thead><tbody>'
+        + _proj_row("Nifty 50 Index Fund",          10000, 12.0)
+        + _proj_row("Nifty Midcap 150 Index Fund",  5000,  14.0)
+        + _proj_row("US Equity (Nasdaq 100 ETF)",   3000,  11.0)
+        + _proj_row("Gold ETF / SGB",               2000,  8.0)
+        + _proj_row("PPF (guaranteed return)",       12500, 7.1)
+        + '</tbody></table>'
+    )
+
+    return (_LT_BUILDER_TEMPLATE
+            .replace("__LT_TILES__", tiles_html)
+            .replace("__LT_ALLOC__", alloc_html)
+            .replace("__LT_PROJ__",  proj_html))
+
+
 # ─────────────────────────────────────────────────────────────
 # MARKET STATUS
 # ─────────────────────────────────────────────────────────────
@@ -647,6 +1162,13 @@ def render_ticker(d, stocks):
     nq = stocks.get("nasdaq")
     if nq:
         items.append(tick("NASDAQ", f"{nq['price']:,.0f}", nq["chg"]))
+
+    mc = stocks.get("nifty_midcap")
+    if mc:
+        items.append(tick("MIDCAP 150", f"{mc['price']:,.0f}", mc["chg"]))
+    gi = stocks.get("nasdaq_india")
+    if gi:
+        items.append(tick("MO NASDAQ 100", f"₹{gi['price']:,.2f}", gi["chg"]))
 
     vix = stocks.get("vix")
     if vix:
@@ -1218,6 +1740,7 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
   <ul class="nav-links">
     <li><button class="active" onclick="showSection('home')">Overview</button></li>
     <li><button onclick="showSection('invest')">Invest</button></li>
+    <li><button onclick="showSection('longterm')">Long-Term</button></li>
     <li><button onclick="showSection('retire')">Retire</button></li>
     <li><button onclick="showSection('stocks')">Risk Lab</button></li>
     <li><button onclick="showSection('loans')">Loans</button></li>
@@ -1236,6 +1759,17 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
 </div>
 
 <div class="page">
+
+<!-- ═══ LONG-TERM PORTFOLIO BUILDER ═══ -->
+<div id="longterm" class="section">
+  <div class="section-header">
+    <div>
+      <div class="section-title">Long-Term Portfolio Builder</div>
+      <div class="section-sub">5–10 year horizon · Allocation, SIP projections, rebalancing rules</div>
+    </div>
+  </div>
+  __PORTFOLIO_BUILDER__
+</div>
 
 <!-- ═══ HOME ═══ -->
 <div id="home" class="section active">
@@ -2846,9 +3380,11 @@ ASSET_CONFIG = [
     ("Silver (SI=F)",         "silver",   "silver"),
     ("Crypto · BTC / ETH",   "crypto",   "crypto"),
     ("Indian Equities",       "stocks",   "stocks"),
+    ("Nifty Midcap 150",      "midcap",   "midcap"),
     ("US Markets · S&amp;P", "usstocks", "usstocks"),
     ("Real Estate",           "property", "property"),
     ("Fixed Deposits",        "fd",       "fd"),
+    ("PPF / NPS / ELSS",      "ppf",      "ppf"),
 ]
 
 
@@ -2896,9 +3432,11 @@ def build_html(crypto_data, stocks_data, signals, ticker_html, updated_at, marke
         "silver":   "Silver (SI=F futures)",
         "crypto":   "Crypto · BTC / ETH / DeFi",
         "stocks":   "Indian Equities · Nifty 50",
+        "midcap":   "Nifty Midcap 150 · 5–10yr horizon",
         "usstocks": "US Markets · S&P 500",
         "property": "Real Estate",
         "fd":       "Fixed Deposits",
+        "ppf":      "PPF / NPS / ELSS · Tax-Saving Instruments",
     }
     for _, key, sig_key in ASSET_CONFIG:
         sig = signals[sig_key]
@@ -2972,14 +3510,18 @@ def build_html(crypto_data, stocks_data, signals, ticker_html, updated_at, marke
     fg_kpi_val  = f"{fs}" if fs is not None else "N/A"
     fg_kpi_sub  = fl if fl else "—"
 
+    # ── Long-Term Portfolio Builder (baked at generation time) ──
+    portfolio_builder_html = render_portfolio_builder(stocks_data)
+
     # ── Assemble ─────────────────────────────────────────────
     html = _HTML_TEMPLATE
-    html = html.replace("__TICKER_HTML__",    ticker_html)
-    html = html.replace("__UPDATED_AT__",     updated_at)
-    html = html.replace("__MARKET_STATUS__",  ms_html)
-    html = html.replace("__REPO_RATE__",      str(REPO_RATE))
-    html = html.replace("__SIDEBAR_ITEMS__",  sidebar_html)
-    html = html.replace("__SIGNAL_DETAILS__", details_html)
+    html = html.replace("__TICKER_HTML__",         ticker_html)
+    html = html.replace("__UPDATED_AT__",           updated_at)
+    html = html.replace("__MARKET_STATUS__",        ms_html)
+    html = html.replace("__REPO_RATE__",            str(REPO_RATE))
+    html = html.replace("__SIDEBAR_ITEMS__",        sidebar_html)
+    html = html.replace("__SIGNAL_DETAILS__",       details_html)
+    html = html.replace("__PORTFOLIO_BUILDER__",    portfolio_builder_html)
     # ── Inject Firebase frontend config from environment variables ──
     html = html.replace("__FIREBASE_API_KEY__",            os.environ.get("FIREBASE_API_KEY", ""))
     html = html.replace("__FIREBASE_AUTH_DOMAIN__",        os.environ.get("FIREBASE_AUTH_DOMAIN", ""))
@@ -3017,7 +3559,7 @@ def main():
         print(f"  ⚠ Live crypto fetch failed: {e}")
         crypto_data, _ = load_lkg()
 
-    print("📈 Fetching stock data (Nifty, S&P 500, NASDAQ)...")
+    print("📈 Fetching stock data (Nifty, S&P 500, NASDAQ, Midcap 150, ETFs)...")
     try:
         stocks_data = fetch_stocks()
     except Exception as e:
@@ -3033,10 +3575,20 @@ def main():
         "silver":   sig_silver(crypto_data, stocks_data),
         "crypto":   sig_crypto(crypto_data),
         "stocks":   sig_stocks(stocks_data),
+        "midcap":   sig_midcap(stocks_data),
         "usstocks": sig_usstocks(stocks_data, crypto_data),
         "property": sig_property(),
         "fd":       sig_fd(),
+        "ppf":      sig_ppf_nps_elss(),
     }
+
+    print("📐 Computing long-term portfolio projections...")
+    alloc_moderate = portfolio_allocation(age=30, risk="moderate")
+    proj_10yr      = sip_projection(monthly_inr=10000, annual_rate_pct=12.0, years=10)
+    print(f"  Moderate allocation (age 30): {alloc_moderate}")
+    print(f"  ₹10K SIP · 12% · 10yr → corpus: ₹{proj_10yr['future_value']:,.0f}"
+          f"  (invested ₹{proj_10yr['invested']:,.0f},"
+          f"  gain ₹{proj_10yr['gain']:,.0f})")
 
     updated_at   = datetime.datetime.utcnow().strftime("%d %b %Y %H:%M")
     market_status = get_market_status()
