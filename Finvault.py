@@ -488,7 +488,7 @@ def sig_silver(d, stocks):
     elif below_ath < 10:
         s,c = "WAIT","wait"
         reasons = [f"Silver near 3-month high (only {below_ath:.1f}% below) — wait for pullback",
-                   "Silver is 2–3× more volatile than gold — don't chase breakouts"]
+                   "Silver is 2–3× more volatile than gold — do not chase breakouts"]
     else:
         s,c = "HOLD","hold"
         reasons = [f"Silver {below_ath:.1f}% below recent high — gradual accumulation zone",
@@ -547,7 +547,7 @@ def sig_crypto(d):
     else:
         reasons = ["Fear & Greed unavailable — defaulting to neutral"]
     if btc24 < -5: reasons.append(f"BTC -{abs(btc24):.1f}% in 24h — short-term entry for believers")
-    if btc24 > 10: reasons.append(f"BTC +{btc24:.1f}% today — FOMO zone, don't chase")
+    if btc24 > 10: reasons.append(f"BTC +{btc24:.1f}% today — FOMO zone, do not chase")
     reasons.append("Only invest what you can afford to lose — crypto is highly volatile")
     metrics = {}
     if d.get("btc_usd"): metrics["Bitcoin (BTC)"] = f"{usd(d['btc_usd'])}  ({pct(btc24)} 24h)"
@@ -3930,7 +3930,7 @@ function sipCalc(){
   var ins='';
   if(top3Under.length){
     var pri=top3Under[0];
-    ins+='<div class="sip-ins mint"><div class="sip-ins-h">&#127919; Top priority this month</div><div class="sip-ins-b">Put <strong>'+sipFmtInr(pri.monthlySuggested)+' into '+pri.name+'</strong>. You're '+pri.gap.toFixed(1)+'% below your '+pri.target+'% target — the biggest gap in your portfolio.</div></div>';
+    ins+='<div class="sip-ins mint"><div class="sip-ins-h">&#127919; Top priority this month</div><div class="sip-ins-b">Put <strong>'+sipFmtInr(pri.monthlySuggested)+' into '+pri.name+'</strong>. You are '+pri.gap.toFixed(1)+'% below your '+pri.target+'% target — the biggest gap in your portfolio.</div></div>';
   }
   if(top2Over.length){
     var over1=top2Over[0];
@@ -4189,7 +4189,7 @@ def build_html(crypto_data, stocks_data, signals, ticker_html, updated_at, marke
 # ─────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(description="FinVault Pro Static Site Generator")
-    parser.add_argument("--dry", action="store_true", help="Print data, don't write file")
+    parser.add_argument("--dry", action="store_true", help="Print data, do not write file")
     args = parser.parse_args()
 
     print("🔄 FinVault Pro Site Generator")
