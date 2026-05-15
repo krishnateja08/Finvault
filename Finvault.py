@@ -2084,6 +2084,7 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
     <div class="calc-tabs-bar">
       <button class="calc-tab active" onclick="switchTab(this,'portfolio','holdings')">My Holdings</button>
       <button class="calc-tab" onclick="switchTab(this,'portfolio','alloc')">Asset Allocation</button>
+      <button class="calc-tab" onclick="switchTab(this,'portfolio','sip')">&#127919; Smart Invest Planner</button>
     </div>
 
     <!-- Holdings Tab -->
@@ -2138,6 +2139,183 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
         </div>
       </div>
     </div>
+
+    <!-- ═══ SMART INVEST PLANNER TAB ═══ -->
+    <div id="portfolio-sip" class="calc-inner" style="display:none">
+      <div style="padding:1.5rem;width:100%">
+
+        <!-- CSS only for this section -->
+        <style>
+        .sip-section{margin-bottom:1.5rem}
+        .sip-sec-title{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#0369a1;margin-bottom:.75rem;display:flex;align-items:center;gap:6px;}
+        .sip-sec-title::before{content:'//';font-family:'Fira Code',monospace;color:#94a3b8}
+        .sip-params{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:8px;padding:14px 16px;margin-bottom:1rem}
+        .sip-param-group{display:flex;flex-direction:column;gap:4px}
+        .sip-param-label{font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.07em}
+        .sip-param-input{background:#fff;border:1.5px solid #bae6fd;border-radius:6px;padding:8px 11px;font-family:'Fira Code',monospace;font-size:14px;color:#0c4a6e;font-weight:600;width:100%;outline:none}
+        .sip-param-input:focus{border-color:#0ea5e9}
+        .sip-param-select{background:#fff;border:1.5px solid #bae6fd;border-radius:6px;padding:8px 11px;font-family:'Outfit',sans-serif;font-size:13px;color:#0c4a6e;font-weight:600;width:100%;outline:none}
+        .sip-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:#bae6fd;border:1.5px solid #bae6fd;border-radius:8px;overflow:hidden;margin-bottom:1rem}
+        .sip-sum-cell{background:#fff;padding:11px 14px}
+        .sip-sum-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#64748b;margin-bottom:3px}
+        .sip-sum-val{font-size:17px;font-weight:800;font-family:'Fira Code',monospace;color:#0c4a6e}
+        .sip-sum-val.sky{color:#0ea5e9}.sip-sum-val.mint{color:#059669}.sip-sum-val.red{color:#dc2626}.sip-sum-val.amb{color:#d97706}
+        .sip-sum-sub{font-size:10px;color:#64748b;margin-top:1px}
+        .sip-add-row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px;align-items:end;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:8px;padding:12px 14px;margin-bottom:1rem}
+        .sip-add-btn{background:#0c4a6e;color:#fff;border:none;border-radius:6px;padding:9px 16px;font-family:'Outfit',sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s}
+        .sip-add-btn:hover{background:#0369a1}
+        .sip-table-wrap{border:1.5px solid #bae6fd;border-radius:8px;overflow:hidden;margin-bottom:1rem}
+        .sip-table{width:100%;border-collapse:collapse;font-size:12px}
+        .sip-th{background:#f0f9ff;padding:9px 12px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#0369a1;border-bottom:1.5px solid #bae6fd;text-align:left}
+        .sip-th.r{text-align:right}
+        .sip-td{padding:10px 12px;border-bottom:1px solid #e0f2fe;color:#334155;vertical-align:middle}
+        .sip-td.mono{font-family:'Fira Code',monospace;color:#0c4a6e;font-weight:600}
+        .sip-td.mint{color:#059669}.sip-td.red{color:#dc2626}.sip-td.sky{color:#0ea5e9}.sip-td.amb{color:#d97706}
+        .sip-td.r{text-align:right}
+        .sip-row-total{background:#f0fdf4;border-top:2px solid #10b981}
+        .sip-row-total .sip-td{font-weight:700;color:#059669}
+        .sip-bar-wrap{position:relative;height:7px;background:#e0f2fe;border-radius:4px;overflow:hidden;min-width:80px}
+        .sip-bar-fill{height:7px;border-radius:4px;transition:width .35s ease}
+        .sip-badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;font-family:'Fira Code',monospace;white-space:nowrap}
+        .sip-badge.over{background:#fef3c7;color:#92400e;border:1px solid rgba(217,119,6,.3)}
+        .sip-badge.under{background:#fee2e2;color:#991b1b;border:1px solid rgba(220,38,38,.25)}
+        .sip-badge.ok{background:#d1fae5;color:#065f46;border:1px solid rgba(16,185,129,.35)}
+        .sip-sug{background:#eff6ff;color:#1d4ed8;border:1px solid rgba(14,165,233,.3);border-radius:4px;padding:2px 8px;font-family:'Fira Code',monospace;font-size:11px;font-weight:600}
+        .sip-sug.mint{background:#d1fae5;color:#065f46;border-color:rgba(16,185,129,.35)}
+        .sip-sug.zero{background:#f1f5f9;color:#64748b;border-color:#e2e8f0}
+        .sip-act{font-size:10px;font-weight:700;padding:3px 9px;border-radius:4px;border:1px solid;cursor:pointer;font-family:'Outfit',sans-serif;background:transparent;transition:all .12s}
+        .sip-act.buy{color:#059669;border-color:rgba(16,185,129,.4)}.sip-act.buy:hover{background:#d1fae5}
+        .sip-act.hold{color:#d97706;border-color:rgba(217,119,6,.3)}.sip-act.rebal{color:#dc2626;border-color:rgba(220,38,38,.3)}
+        .sip-act.del{color:#94a3b8;border-color:#e2e8f0;font-size:11px}.sip-act.del:hover{color:#dc2626;border-color:rgba(220,38,38,.3)}
+        .sip-alert{border-radius:8px;padding:12px 16px;margin-bottom:1rem;display:flex;align-items:flex-start;gap:10px;font-size:12px;line-height:1.55}
+        .sip-alert.warn{background:#fef9c3;border:1.5px solid rgba(217,119,6,.35);color:#92400e}
+        .sip-alert.danger{background:#fee2e2;border:1.5px solid rgba(220,38,38,.3);color:#991b1b}
+        .sip-alert.info{background:#eff6ff;border:1.5px solid rgba(14,165,233,.3);color:#1d4ed8}
+        .sip-alert.ok{background:#ecfdf5;border:1.5px solid rgba(16,185,129,.3);color:#065f46}
+        .sip-insights{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:1rem}
+        .sip-ins{background:#fff;border:1.5px solid #bae6fd;border-radius:8px;padding:13px 15px}
+        .sip-ins.mint{border-left:4px solid #10b981;border-radius:0 8px 8px 0}.sip-ins.red{border-left:4px solid #dc2626;border-radius:0 8px 8px 0}.sip-ins.sky{border-left:4px solid #0ea5e9;border-radius:0 8px 8px 0}.sip-ins.amb{border-left:4px solid #d97706;border-radius:0 8px 8px 0}
+        .sip-ins-h{font-size:12px;font-weight:700;color:#0c4a6e;margin-bottom:5px}
+        .sip-ins-b{font-size:12px;color:#475569;line-height:1.55}
+        .sip-ins-b strong{color:#0c4a6e}
+        .color-dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;flex-shrink:0}
+        </style>
+
+        <!-- Params row -->
+        <div class="sip-section">
+          <div class="sip-sec-title">Investment Parameters</div>
+          <div class="sip-params">
+            <div class="sip-param-group">
+              <div class="sip-param-label">Monthly savings to invest (&#8377;)</div>
+              <input class="sip-param-input" id="sipMonthly" type="number" value="50000" min="0" step="1000" oninput="sipCalc()">
+            </div>
+            <div class="sip-param-group">
+              <div class="sip-param-label">Your age</div>
+              <input class="sip-param-input" id="sipAge" type="number" value="35" min="18" max="70" oninput="sipCalc()">
+            </div>
+            <div class="sip-param-group">
+              <div class="sip-param-label">Risk profile</div>
+              <select class="sip-param-select" id="sipRisk" onchange="sipCalc()">
+                <option value="moderate">Moderate</option>
+                <option value="aggressive">Aggressive</option>
+                <option value="conservative">Conservative</option>
+              </select>
+            </div>
+            <div class="sip-param-group">
+              <div class="sip-param-label">Rebalance alert threshold</div>
+              <select class="sip-param-select" id="sipThreshold" onchange="sipCalc()">
+                <option value="5">5% drift</option>
+                <option value="3">3% drift</option>
+                <option value="10">10% drift</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Alerts area -->
+        <div id="sipAlerts"></div>
+
+        <!-- Summary strip -->
+        <div class="sip-summary" id="sipSummary">
+          <div class="sip-sum-cell"><div class="sip-sum-label">Total portfolio</div><div class="sip-sum-val sky" id="sipTotalVal">&#8377;0</div><div class="sip-sum-sub" id="sipAssetCount">0 asset classes</div></div>
+          <div class="sip-sum-cell"><div class="sip-sum-label">Monthly SIP allocated</div><div class="sip-sum-val mint" id="sipMonthlyDisp">&#8377;0</div><div class="sip-sum-sub">Split shown below</div></div>
+          <div class="sip-sum-cell"><div class="sip-sum-label">Portfolio health</div><div class="sip-sum-val" id="sipHealthVal" style="color:#d97706">—</div><div class="sip-sum-sub" id="sipHealthLbl">Add assets to score</div></div>
+          <div class="sip-sum-cell"><div class="sip-sum-label">Target % total</div><div class="sip-sum-val" id="sipTargetSum" style="color:#0c4a6e">0%</div><div class="sip-sum-sub" id="sipTargetLbl">Should equal 100%</div></div>
+        </div>
+
+        <!-- Add asset row -->
+        <div class="sip-section">
+          <div class="sip-sec-title">Add / Edit Asset Class</div>
+          <div class="sip-add-row">
+            <div class="sip-param-group">
+              <div class="sip-param-label">Asset class name</div>
+              <input class="sip-param-input" id="sipAssetName" placeholder="e.g. Domestic Stock Market" style="font-family:'Outfit',sans-serif;font-size:13px">
+            </div>
+            <div class="sip-param-group">
+              <div class="sip-param-label">Current value (&#8377;)</div>
+              <input class="sip-param-input" id="sipAssetValue" type="number" placeholder="858581" min="0">
+            </div>
+            <div class="sip-param-group">
+              <div class="sip-param-label">Target %</div>
+              <input class="sip-param-input" id="sipAssetTarget" type="number" placeholder="25" min="0" max="100" step="0.5">
+            </div>
+            <div class="sip-param-group">
+              <div class="sip-param-label">Colour tag</div>
+              <input type="color" id="sipAssetColor" value="#0ea5e9" style="width:100%;height:36px;border:1.5px solid #bae6fd;border-radius:6px;padding:2px;cursor:pointer;background:#fff">
+            </div>
+            <div class="sip-param-group">
+              <div class="sip-param-label">&nbsp;</div>
+              <button class="sip-add-btn" onclick="sipAddAsset()">+ Add Asset</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Main allocation table -->
+        <div class="sip-section">
+          <div class="sip-sec-title">Allocation &amp; Monthly SIP Breakdown</div>
+          <div class="sip-table-wrap">
+            <table class="sip-table" id="sipTable">
+              <thead>
+                <tr>
+                  <th class="sip-th">Asset class</th>
+                  <th class="sip-th r">Value (&#8377;)</th>
+                  <th class="sip-th r">Current %</th>
+                  <th class="sip-th r">Target %</th>
+                  <th class="sip-th">Allocation</th>
+                  <th class="sip-th">Status</th>
+                  <th class="sip-th r">Monthly SIP</th>
+                  <th class="sip-th r">Gap vs target</th>
+                  <th class="sip-th">Action</th>
+                  <th class="sip-th"></th>
+                </tr>
+              </thead>
+              <tbody id="sipTbody"></tbody>
+              <tfoot id="sipTfoot"></tfoot>
+            </table>
+          </div>
+          <div id="sipEmpty" style="text-align:center;padding:2rem;color:#64748b;font-size:13px;display:none">
+            No assets added yet. Use the form above to add your asset classes.
+          </div>
+        </div>
+
+        <!-- Insights -->
+        <div class="sip-section">
+          <div class="sip-sec-title">Expert Insights</div>
+          <div class="sip-insights" id="sipInsights"></div>
+        </div>
+
+        <!-- Save / Load -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:.5rem">
+          <button onclick="sipSave()" style="background:#0ea5e9;color:#fff;border:none;border-radius:6px;padding:8px 18px;font-family:'Outfit',sans-serif;font-size:12px;font-weight:700;cursor:pointer">&#128190; Save portfolio</button>
+          <button onclick="sipLoad()" style="background:#fff;color:#0369a1;border:1.5px solid #bae6fd;border-radius:6px;padding:8px 18px;font-family:'Outfit',sans-serif;font-size:12px;font-weight:700;cursor:pointer">&#8635; Load saved</button>
+          <button onclick="sipClear()" style="background:#fff;color:#dc2626;border:1.5px solid rgba(220,38,38,.3);border-radius:6px;padding:8px 18px;font-family:'Outfit',sans-serif;font-size:12px;font-weight:700;cursor:pointer">&#128465; Clear all</button>
+          <span id="sipSaveMsg" style="display:none;font-size:11px;color:#059669;font-family:'Fira Code',monospace;align-self:center;padding-left:6px">&#10003; Saved</span>
+        </div>
+
+      </div>
+    </div>
+    <!-- ══════════════════════════════════════════ -->
+
   </div>
 </div>
 
@@ -2739,6 +2917,7 @@ function showSection(id){
   });
   if(id==='dashboard')renderDashboard();
   if(id==='portfolio'){ptRender();calcAlloc();}
+  if(tab==='sip'){sipCalc();}
   if(id==='invest')setTimeout(calcStepUp,100);
 }
 
@@ -3346,6 +3525,230 @@ function renderDashboard(){
   const yrs=Math.max(1,retireAge-age),proj=sip*(Math.pow(1+.12/12,yrs*12)-1)/(.12/12)*(1+.12/12),fireNum=expenses*12*25;
   document.getElementById('dashScenarios').innerHTML='<div class="scenario-list"><div class="scenario-row"><span class="scenario-label">SIP '+fmtC(sip)+'/mo · '+yrs+' yrs @12%</span><span class="scenario-val green">'+fmtC(proj)+'</span></div><div class="scenario-row"><span class="scenario-label">FIRE Number (25× expenses)</span><span class="scenario-val '+(proj>=fireNum?'green':'amber')+'">'+fmtC(fireNum)+'</span></div><div class="scenario-row" style="background:rgba('+(proj>=fireNum?'0,192,127':'232,168,37')+',.05)"><span class="scenario-label">'+(proj>=fireNum?'Surplus over FIRE':'Gap to FIRE')+'</span><span class="scenario-val '+(proj>=fireNum?'green':'amber')+'">'+fmtC(Math.abs(proj-fireNum))+'</span></div><div class="scenario-row"><span class="scenario-label">If market crashes -30%</span><span class="scenario-val amber">'+fmtC((savings||0)*.7)+'</span></div></div>';
 }
+
+
+
+// ════════════════════════════════════════════════════════
+// SMART INVEST PLANNER
+// ════════════════════════════════════════════════════════
+var sipAssets = [];
+var SIP_COLORS = ['#0ea5e9','#10b981','#8b5cf6','#f59e0b','#ef4444','#6366f1','#ec4899','#14b8a6','#f97316','#84cc16','#06b6d4','#a855f7'];
+
+// Load persisted data
+try{const d=localStorage.getItem('fv_sip_assets');if(d)sipAssets=JSON.parse(d);}catch(e){}
+
+function sipPersist(){try{localStorage.setItem('fv_sip_assets',JSON.stringify(sipAssets));}catch(e){}}
+
+function sipFmtInr(n){
+  if(isNaN(n)||n===null)return '—';
+  n=Math.round(n);
+  if(Math.abs(n)>=1e7)return '&#8377;'+(n/1e7).toFixed(2)+' Cr';
+  if(Math.abs(n)>=1e5)return '&#8377;'+(n/1e5).toFixed(2)+' L';
+  return '&#8377;'+n.toLocaleString('en-IN');
+}
+
+function sipAddAsset(){
+  var name=(document.getElementById('sipAssetName').value||'').trim();
+  var val=parseFloat(document.getElementById('sipAssetValue').value)||0;
+  var tgt=parseFloat(document.getElementById('sipAssetTarget').value)||0;
+  var col=document.getElementById('sipAssetColor').value||SIP_COLORS[sipAssets.length%SIP_COLORS.length];
+  if(!name){alert('Please enter an asset class name.');return;}
+  if(val<0||tgt<0){alert('Values must be positive.');return;}
+  // Update existing or add new
+  var existing=sipAssets.find(function(a){return a.name.toLowerCase()===name.toLowerCase();});
+  if(existing){existing.value=val;existing.target=tgt;existing.color=col;}
+  else{sipAssets.push({id:Date.now(),name:name,value:val,target:tgt,color:col});}
+  sipPersist();
+  document.getElementById('sipAssetName').value='';
+  document.getElementById('sipAssetValue').value='';
+  document.getElementById('sipAssetTarget').value='';
+  document.getElementById('sipAssetColor').value=SIP_COLORS[sipAssets.length%SIP_COLORS.length];
+  sipCalc();
+}
+
+function sipRemove(id){
+  sipAssets=sipAssets.filter(function(a){return a.id!==id;});
+  sipPersist();sipCalc();
+}
+
+function sipCalc(){
+  var monthly=parseFloat(document.getElementById('sipMonthly').value)||0;
+  var threshold=parseFloat(document.getElementById('sipThreshold').value)||5;
+  var total=sipAssets.reduce(function(s,a){return s+a.value;},0);
+  var targetSum=sipAssets.reduce(function(s,a){return s+a.target;},0);
+  var tbody=document.getElementById('sipTbody');
+  var tfoot=document.getElementById('sipTfoot');
+  var emptyEl=document.getElementById('sipEmpty');
+  var alertsEl=document.getElementById('sipAlerts');
+
+  // Summary strip
+  document.getElementById('sipTotalVal').innerHTML=sipFmtInr(total);
+  document.getElementById('sipAssetCount').textContent=sipAssets.length+' asset class'+(sipAssets.length!==1?'es':'');
+  document.getElementById('sipMonthlyDisp').innerHTML=sipFmtInr(monthly);
+  var tsEl=document.getElementById('sipTargetSum');
+  tsEl.textContent=targetSum.toFixed(1)+'%';
+  tsEl.style.color=Math.abs(targetSum-100)<0.5?'#059669':targetSum>100?'#dc2626':'#d97706';
+  document.getElementById('sipTargetLbl').textContent=Math.abs(targetSum-100)<0.5?'Perfect — sums to 100%':targetSum>100?'⚠ Over 100% — reduce targets':'⚠ Under 100% — increase targets';
+
+  if(!sipAssets.length){
+    if(tbody)tbody.innerHTML='';if(tfoot)tfoot.innerHTML='';
+    emptyEl.style.display='block';
+    alertsEl.innerHTML='';
+    document.getElementById('sipInsights').innerHTML='<div style="color:#64748b;font-size:13px;padding:1rem 0">Add your asset classes above to get personalised investment suggestions.</div>';
+    document.getElementById('sipHealthVal').textContent='—';
+    document.getElementById('sipHealthLbl').textContent='Add assets to score';
+    return;
+  }
+  emptyEl.style.display='none';
+
+  // Per-asset calcs
+  var assets=sipAssets.map(function(a){
+    var curPct=total>0?(a.value/total*100):0;
+    var gap=a.target-curPct;
+    return Object.assign({},a,{curPct:curPct,gap:gap});
+  });
+
+  // Distribute monthly SIP: proportional to positive gap only
+  var totalGap=assets.reduce(function(s,a){return s+(a.gap>0?a.gap:0);},0);
+  assets.forEach(function(a){
+    a.monthlySuggested=totalGap>0&&a.gap>0?(a.gap/totalGap)*monthly:0;
+  });
+
+  // Render table rows
+  var rows='';
+  assets.forEach(function(a){
+    var barWidth=total>0?Math.min(100,(a.value/total*100)/(a.target||1)*100):0;
+    barWidth=Math.min(100,barWidth);
+    var statusBadge='';
+    var actionBtn='';
+    var sipClass='sip-sug';
+    var sipText='';
+    var gapSign=a.gap>=0?'+':'';
+    var gapCls=a.gap<-threshold?'red':a.gap>threshold?'amb':'mint';
+
+    if(Math.abs(a.gap)<=threshold){
+      statusBadge='<span class="sip-badge ok">&#10003; On target</span>';
+      actionBtn='<button class="sip-act hold">HOLD</button>';
+      sipClass='sip-sug zero';sipText='&#8377;0 — hold';
+    } else if(a.gap>threshold){
+      statusBadge='<span class="sip-badge under">&#9660; '+Math.abs(a.gap).toFixed(1)+'% under</span>';
+      actionBtn='<button class="sip-act buy">BUY &#8599;</button>';
+      sipClass='sip-sug mint';sipText=sipFmtInr(a.monthlySuggested);
+    } else {
+      statusBadge='<span class="sip-badge over">&#9650; '+Math.abs(a.gap).toFixed(1)+'% over</span>';
+      actionBtn='<button class="sip-act rebal">REBALANCE</button>';
+      sipClass='sip-sug zero';sipText='&#8377;0 — stop/redeploy';
+    }
+
+    rows+='<tr>'
+      +'<td class="sip-td"><span class="color-dot" style="background:'+a.color+'"></span><strong>'+a.name+'</strong></td>'
+      +'<td class="sip-td mono r">'+sipFmtInr(a.value)+'</td>'
+      +'<td class="sip-td mono r">'+a.curPct.toFixed(2)+'%</td>'
+      +'<td class="sip-td mono r">'+a.target+'%</td>'
+      +'<td class="sip-td"><div class="sip-bar-wrap"><div class="sip-bar-fill" style="width:'+barWidth+'%;background:'+a.color+'"></div></div></td>'
+      +'<td class="sip-td">'+statusBadge+'</td>'
+      +'<td class="sip-td r"><span class="'+sipClass+'">'+sipText+'</span></td>'
+      +'<td class="sip-td mono r '+gapCls+'">'+(a.gap>=0?'+':'')+a.gap.toFixed(1)+'%</td>'
+      +'<td class="sip-td">'+actionBtn+'</td>'
+      +'<td class="sip-td"><button class="sip-act del" onclick="sipRemove('+a.id+')">&#10005;</button></td>'
+      +'</tr>';
+  });
+  if(tbody)tbody.innerHTML=rows;
+
+  // Total footer row
+  var totalSip=assets.reduce(function(s,a){return s+a.monthlySuggested;},0);
+  var footHtml='<tr class="sip-row-total">'
+    +'<td class="sip-td" style="font-size:13px;font-weight:800;color:#059669">TOTAL PORTFOLIO</td>'
+    +'<td class="sip-td mono r" style="font-size:14px;font-weight:800;color:#059669">'+sipFmtInr(total)+'</td>'
+    +'<td class="sip-td mono r">100%</td>'
+    +'<td class="sip-td mono r '+(Math.abs(targetSum-100)<0.5?'mint':targetSum>100?'red':'amb')+'" style="font-weight:700">'+targetSum.toFixed(1)+'%</td>'
+    +'<td class="sip-td"></td>'
+    +'<td class="sip-td" style="font-size:11px;color:#059669;font-weight:700">'+(totalGap>0?'&#8592; Rebalance needed':'&#10003; Portfolio balanced')+'</td>'
+    +'<td class="sip-td r"><span class="sip-sug mint" style="font-size:12px">'+sipFmtInr(totalSip)+'</span></td>'
+    +'<td class="sip-td" colspan="3"></td>'
+    +'</tr>';
+  if(tfoot)tfoot.innerHTML=footHtml;
+
+  // ── Health score (0-100) ──
+  var overCount=assets.filter(function(a){return a.gap<-threshold;}).length;
+  var underCount=assets.filter(function(a){return a.gap>threshold;}).length;
+  var targetOk=Math.abs(targetSum-100)<0.5;
+  var health=100;
+  health-=overCount*10;
+  health-=underCount*8;
+  if(!targetOk)health-=15;
+  var cashAsset=assets.find(function(a){return /cash|liquid/i.test(a.name);});
+  if(cashAsset&&cashAsset.curPct>20)health-=15;
+  var loanAsset=assets.find(function(a){return /loan|lend/i.test(a.name);});
+  if(loanAsset&&loanAsset.curPct>5)health-=10;
+  health=Math.max(0,Math.min(100,health));
+  var hEl=document.getElementById('sipHealthVal');
+  hEl.textContent=health+' / 100';
+  hEl.style.color=health>=75?'#059669':health>=50?'#d97706':'#dc2626';
+  document.getElementById('sipHealthLbl').textContent=health>=75?'Healthy portfolio':health>=50?'Needs rebalancing':'Urgent action needed';
+
+  // ── Alerts ──
+  var alerts='';
+  if(!targetOk){
+    if(targetSum>100)alerts+='<div class="sip-alert danger">&#9888;&nbsp; Your target percentages add up to <strong>'+targetSum.toFixed(1)+'%</strong> — they must total exactly 100%. Please reduce some targets before SIP suggestions will be accurate.</div>';
+    else alerts+='<div class="sip-alert warn">&#9888;&nbsp; Your target percentages add up to only <strong>'+targetSum.toFixed(1)+'%</strong>. Increase targets to 100% total for accurate suggestions.</div>';
+  }
+  if(cashAsset&&cashAsset.curPct>20)alerts+='<div class="sip-alert warn">&#128201;&nbsp; <strong>Cash / Liquid is '+cashAsset.curPct.toFixed(1)+'% of your portfolio</strong> — that's ₹'+Math.round(cashAsset.value).toLocaleString('en-IN')+' sitting idle. Redirect 2–3 months of savings to equity before adding new cash.</div>';
+  if(loanAsset&&loanAsset.curPct>5)alerts+='<div class="sip-alert danger">&#9888;&nbsp; <strong>Loan to friends/family is '+loanAsset.curPct.toFixed(1)+'% of your portfolio</strong>. This carries counterparty risk and earns informal interest. Consider recovering it and reinvesting in regulated instruments.</div>';
+  var bigAsset=assets.find(function(a){return a.curPct>35;});
+  if(bigAsset)alerts+='<div class="sip-alert warn">&#9888;&nbsp; <strong>'+bigAsset.name+' at '+bigAsset.curPct.toFixed(1)+'%</strong> — single-asset concentration above 35% creates risk. Diversify before adding more here.</div>';
+  if(health>=80&&!alerts)alerts='<div class="sip-alert ok">&#10003;&nbsp; Your portfolio is well-balanced. Keep your SIPs running and rebalance annually.</div>';
+  alertsEl.innerHTML=alerts;
+
+  // ── Expert insights ──
+  var sorted=[].concat(assets).sort(function(a,b){return b.gap-a.gap;});
+  var top3Under=sorted.filter(function(a){return a.gap>threshold;}).slice(0,3);
+  var top2Over=sorted.filter(function(a){return a.gap<-threshold;}).reverse().slice(0,2);
+  var ins='';
+  if(top3Under.length){
+    var pri=top3Under[0];
+    ins+='<div class="sip-ins mint"><div class="sip-ins-h">&#127919; Top priority this month</div><div class="sip-ins-b">Put <strong>'+sipFmtInr(pri.monthlySuggested)+' into '+pri.name+'</strong>. You're '+pri.gap.toFixed(1)+'% below your '+pri.target+'% target — the biggest gap in your portfolio.</div></div>';
+  }
+  if(top2Over.length){
+    var over1=top2Over[0];
+    ins+='<div class="sip-ins red"><div class="sip-ins-h">&#9888; Stop investing here</div><div class="sip-ins-b"><strong>'+over1.name+' is '+Math.abs(over1.gap).toFixed(1)+'% over target</strong>. Add &#8377;0 here. If possible, redeploy some of it into your under-allocated assets.</div></div>';
+  }
+  if(!targetOk&&targetSum>100){
+    ins+='<div class="sip-ins amb"><div class="sip-ins-h">&#128202; Fix your targets first</div><div class="sip-ins-b">Targets total <strong>'+targetSum.toFixed(1)+'%</strong> — must equal 100%. Reduce Loan for Interest and Liquid targets, then recalculate SIP.</div></div>';
+  } else if(monthly>0&&top3Under.length>=2){
+    var rem=top3Under.slice(1);
+    var remText=rem.map(function(a){return a.name+' ('+sipFmtInr(a.monthlySuggested)+')'}).join(', ');
+    ins+='<div class="sip-ins sky"><div class="sip-ins-h">&#128200; Next priorities</div><div class="sip-ins-b">After top priority, allocate remaining SIP to: <strong>'+remText+'</strong>.</div></div>';
+  }
+  if(cashAsset&&cashAsset.value>500000){
+    ins+='<div class="sip-ins amb"><div class="sip-ins-h">&#128176; Deploy idle cash</div><div class="sip-ins-b">You have <strong>'+sipFmtInr(cashAsset.value)+' in '+cashAsset.name+'</strong>. Move &#8377;10–15K/month into equity index funds via SIP instead of adding more cash.</div></div>';
+  }
+  if(!ins)ins='<div class="sip-ins sky"><div class="sip-ins-h">&#128200; Add more assets</div><div class="sip-ins-b">Add your real portfolio holdings above to get personalised monthly investment suggestions and rebalancing alerts.</div></div>';
+  document.getElementById('sipInsights').innerHTML=ins;
+}
+
+function sipSave(){
+  sipPersist();
+  var msg=document.getElementById('sipSaveMsg');
+  msg.style.display='inline';
+  setTimeout(function(){msg.style.display='none';},2000);
+}
+
+function sipLoad(){
+  try{
+    var d=localStorage.getItem('fv_sip_assets');
+    if(d){sipAssets=JSON.parse(d);sipCalc();alert('Portfolio loaded from browser storage.');}
+    else{alert('No saved portfolio found.');}
+  }catch(e){alert('Load failed: '+e.message);}
+}
+
+function sipClear(){
+  if(!confirm('Clear all assets from the planner? This cannot be undone.'))return;
+  sipAssets=[];sipPersist();sipCalc();
+}
+
+// Auto-init when tab becomes visible
+document.addEventListener('DOMContentLoaded',function(){if(sipAssets.length)sipCalc();});
 
 // ════════ INIT ════════
 document.addEventListener('DOMContentLoaded',()=>{
