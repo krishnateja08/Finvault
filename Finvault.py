@@ -81,91 +81,14 @@ def get_firebase_db():
     return _db
 
 # ─────────────────────────────────────────────────────────────
-# CONFIG — rates auto-refreshed; fallbacks apply if APIs fail
+# CONFIG — tweak as needed
 # ─────────────────────────────────────────────────────────────
+REPO_RATE     = 6.25   # RBI repo rate % — UPDATE after every RBI MPC meeting (held ~every 6 weeks)
+                       # RBI MPC schedule: https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx
+PREV_REPO     = 6.50   # previous rate — determines cutting/hiking/stable cycle direction
+HOME_LOAN     = 8.50   # avg home loan rate %
 OUTPUT_FILE   = "index.html"
-LKG_FILE      = "data.json"
-
-# ── Rate registry: every hard-coded macro rate tracked here ──
-# Each entry: (value, last_verified_date, source, days_until_stale)
-RATE_REGISTRY = {
-    "repo_rate":   (6.25, "2025-04-09", "RBI MPC — rbi.org.in", 60),
-    "prev_repo":   (6.50, "2024-12-06", "RBI MPC — rbi.org.in", 9999),
-    "ppf_rate":    (7.10, "2025-01-01", "Finmin Q1 FY26 — finmin.nic.in", 90),
-    "cpi_inflation":(5.00,"2025-03-31", "MoSPI — mospi.gov.in", 45),
-    "home_loan":   (8.50, "2025-04-01", "SBI/HDFC avg — bankbazaar.com", 60),
-}
-
-def _rate(key):
-    """Return (value, is_stale, days_old) for a tracked rate."""
-    import datetime
-    entry = RATE_REGISTRY.get(key, (0, "1970-01-01", "unknown", 30))
-    val, verified, source, stale_days = entry
-    try:
-        verified_dt = datetime.datetime.strptime(verified, "%Y-%m-%d").date()
-        days_old = (datetime.date.today() - verified_dt).days
-        is_stale = days_old > stale_days
-    except Exception:
-        days_old, is_stale = 0, False
-    return val, is_stale, days_old, source
-
-def fetch_dynamic_rates():
-    """
-    Attempt to pull live RBI repo rate from public data endpoints.
-    Falls back to RATE_REGISTRY values with a staleness warning.
-    Returns dict with values + quality metadata for dashboard display.
-    """
-    rates = {}
-    errors = []
-
-    # ── Try fetching repo rate from RBI DBIE public API ─────────
-    try:
-        resp = SESSION.get(
-            "https://api.data.gov.in/resource/2e182eb4-c2e6-4426-a589-daf54d2d6db0"
-            "?api-key=579b464db66ec23bdd000001cdd3946e44ce4aeba0c09c2ff06b4ef"
-            "&format=json&limit=1&sort[date]=desc",
-            timeout=5
-        )
-        if resp.status_code == 200:
-            j = resp.json()
-            rec = j.get("records", [{}])[0]
-            repo_val = float(rec.get("repo_rate", 0) or 0)
-            if repo_val > 0:
-                rates["repo_rate"] = repo_val
-                rates["repo_source"] = "data.gov.in (LIVE)"
-                rates["repo_live"] = True
-                print(f"  ✅ Live repo rate fetched: {repo_val}%")
-    except Exception as e:
-        errors.append(f"Repo rate API failed: {e}")
-
-    # ── Fallback for any rates not fetched live ──────────────────
-    for key in ["repo_rate", "prev_repo", "ppf_rate", "cpi_inflation", "home_loan"]:
-        if key not in rates:
-            val, is_stale, days_old, source = _rate(key)
-            rates[key] = val
-            rates[f"{key}_stale"] = is_stale
-            rates[f"{key}_days_old"] = days_old
-            rates[f"{key}_source"] = source + " (cached)"
-            rates[f"{key}_live"] = False
-            if is_stale:
-                errors.append(
-                    f"STALE DATA: '{key}' = {val} — last verified {days_old} days ago "
-                    f"(source: {source}). UPDATE REQUIRED."
-                )
-
-    if errors:
-        for err in errors:
-            print(f"  ⚠  {err}")
-
-    rates["_errors"] = errors
-    rates["_quality"] = "LIVE" if rates.get("repo_live") else "CACHED"
-    return rates
-
-# ── Pull rates at module load — everything downstream uses these ─
-_RATES         = {}   # populated in main()
-REPO_RATE      = RATE_REGISTRY["repo_rate"][0]
-PREV_REPO      = RATE_REGISTRY["prev_repo"][0]
-HOME_LOAN      = RATE_REGISTRY["home_loan"][0]
+LKG_FILE      = "data.json"   # Last Known Good data cache — fallback if APIs fail
 
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "Mozilla/5.0 FinVault/3.0", "Accept": "application/json"})
@@ -451,24 +374,7 @@ def sig_gold(d):
     metrics = {"USD Price": usd(g["usd"]), "INR Price": inr_fmt(g["inr"]),
                "24h Change": pct(g["c24h"]), "30d Change": pct(g["c30d"]),
                "vs ATH": f"{below_ath:.1f}% below"}
-    direction_lbl = "rate-cutting" if REPO_RATE < PREV_REPO else "rate-hiking"
-    if s == "BUY":
-        kt = (f"Gold is {below_ath:.1f}% below its all-time high in a {direction_lbl} environment — a textbook accumulation zone. "
-              f"Add in 2–3 tranches over the next 6 weeks; prioritise SGB for the 2.5% annual interest bonus and tax-free maturity.")
-    elif s == "WAIT":
-        kt = (f"Gold is near all-time highs with only {below_ath:.1f}% downside buffer — you are paying a scarcity premium. "
-              f"Set a price alert for a 10–12% pullback; until then, hold existing and deploy zero new capital.")
-    else:
-        kt = (f"Gold trades {below_ath:.1f}% below ATH — fair value, neither cheap nor expensive in this {direction_lbl} cycle. "
-              f"Hold existing positions; accumulate only on 10%+ dips and never chase weekly rallies.")
-    repo_cut_inr = round(g["inr"] * 1.05)
-    sensitivity = [
-        {"scenario": "If USD weakens 5%",       "impact": f"Gold INR price rises to ≈₹{repo_cut_inr:,.0f} independently of USD spot", "direction": "positive"},
-        {"scenario": "If inflation rises +1%",   "impact": "Gold typically gains 3–5% as a real-asset hedge; strengthens BUY case",   "direction": "positive"},
-        {"scenario": "If repo rate hikes 0.5%",  "impact": "Opportunity cost of gold rises; reduces relative appeal vs FD",            "direction": "negative"},
-    ]
     return {"signal":s,"cls":c,"reasons":reasons,"metrics":metrics,
-            "key_takeaway": kt, "sensitivity": sensitivity,
             "source":"CoinGecko (PAXG proxy)","context":"SGB offers 2.5% annual interest on top of gold returns — best option for Indian investors."}
 
 def sig_silver(d, stocks):
@@ -488,7 +394,7 @@ def sig_silver(d, stocks):
     elif below_ath < 10:
         s,c = "WAIT","wait"
         reasons = [f"Silver near 3-month high (only {below_ath:.1f}% below) — wait for pullback",
-                   "Silver is 2–3× more volatile than gold — do not chase breakouts"]
+                   "Silver is 2–3× more volatile than gold — don't chase breakouts"]
     else:
         s,c = "HOLD","hold"
         reasons = [f"Silver {below_ath:.1f}% below recent high — gradual accumulation zone",
@@ -510,23 +416,7 @@ def sig_silver(d, stocks):
         "Gold/Silver Ratio": f"{gsr:.1f}" if gsr else "N/A",
         "Source":          "Yahoo Finance SI=F (silver futures)"
     }
-    gsr_txt = f"{gsr:.0f}" if gsr else "N/A"
-    if s == "BUY":
-        kt = (f"Silver is {below_ath:.1f}% below its recent high with the Gold/Silver Ratio at {gsr_txt} — historically a catch-up entry signal. "
-              f"Allocate up to 5% of portfolio via Silver ETFs on NSE; never exceed 10% as volatility is 2–3× that of gold.")
-    elif s == "WAIT":
-        kt = (f"Silver is near its recent high — momentum chasers are in control and the risk/reward is unfavourable. "
-              f"Wait for a 15–20% pullback or the GSR to rise above 80 before adding fresh exposure.")
-    else:
-        kt = (f"Silver is {below_ath:.1f}% below its recent high — gradual accumulation territory with caution advised. "
-              f"Buy in small tranches only; silver's industrial demand linkage makes it more cyclical than gold.")
-    sensitivity = [
-        {"scenario": "If Gold/Silver Ratio rises to 85+", "impact": "Silver deeply undervalued vs gold — historically strong BUY signal",           "direction": "positive"},
-        {"scenario": "If EV production +30% this year",   "impact": "Silver industrial demand rises; structural price support strengthens",          "direction": "positive"},
-        {"scenario": "If global recession fears rise",    "impact": "Industrial silver demand drops sharply — silver typically falls 30–40% in recessions", "direction": "negative"},
-    ]
     return {"signal":s,"cls":c,"reasons":reasons,"metrics":metrics,
-            "key_takeaway": kt, "sensitivity": sensitivity,
             "source":"Yahoo Finance (SI=F silver futures)","context":"No SGB for silver — use Silver ETFs on NSE for tax-efficient paper exposure."}
 
 def sig_crypto(d):
@@ -547,7 +437,7 @@ def sig_crypto(d):
     else:
         reasons = ["Fear & Greed unavailable — defaulting to neutral"]
     if btc24 < -5: reasons.append(f"BTC -{abs(btc24):.1f}% in 24h — short-term entry for believers")
-    if btc24 > 10: reasons.append(f"BTC +{btc24:.1f}% today — FOMO zone, do not chase")
+    if btc24 > 10: reasons.append(f"BTC +{btc24:.1f}% today — FOMO zone, don't chase")
     reasons.append("Only invest what you can afford to lose — crypto is highly volatile")
     metrics = {}
     if d.get("btc_usd"): metrics["Bitcoin (BTC)"] = f"{usd(d['btc_usd'])}  ({pct(btc24)} 24h)"
@@ -696,24 +586,7 @@ def sig_property():
                "Post-Tax Yield (10% slab)": f"~{pt_rental_10:.2f}%",
                "Post-Tax Yield (30% slab)": f"~{pt_rental_30:.2f}%",
                "Appreciation": "5–12%/yr (city-dependent)"}
-    emi_50l = round((5000000 * (HOME_LOAN/100/12) * (1+HOME_LOAN/100/12)**240) / ((1+HOME_LOAN/100/12)**240 - 1))
-    emi_cut = round((5000000 * ((HOME_LOAN-0.5)/100/12) * (1+(HOME_LOAN-0.5)/100/12)**240) / ((1+(HOME_LOAN-0.5)/100/12)**240 - 1))
-    if s == "BUY":
-        kt = (f"RBI is in a rate-cutting cycle — home loan EMIs on a ₹50L loan at {HOME_LOAN}% are ₹{emi_50l:,.0f}/month and falling. "
-              f"This is the window to negotiate fixed-rate terms; pre-approval now locks in current rates before the next cut reduces bank margins.")
-    elif s == "WAIT":
-        kt = (f"RBI is hiking rates — home loan EMIs are rising and affordability is declining. "
-              f"Wait for the rate cycle to peak and reverse; every 0.5% rate cut saves ≈₹{emi_50l-emi_cut:,.0f}/month on a ₹50L loan.")
-    else:
-        kt = (f"Rates are stable at {REPO_RATE}% — neither a rush nor a reason to wait. "
-              f"Buy on fundamentals (location, rental yield > 3%, builder reputation) rather than EMI optimisation alone.")
-    sensitivity = [
-        {"scenario": "If repo cut 0.5% more",            "impact": f"EMI on ₹50L drops from ₹{emi_50l:,.0f} to ≈₹{emi_cut:,.0f}/mo — saving ₹{emi_50l-emi_cut:,.0f}/mo", "direction": "positive"},
-        {"scenario": "If property prices rise 10%/yr",   "impact": "On ₹50L loan property, gross gain = ₹5L/yr but net of 8.5% loan cost ≈ break-even — rent may beat buying", "direction": "neutral"},
-        {"scenario": "If repo hikes 0.5%",               "impact": f"EMI rises ≈₹{emi_50l - emi_cut:,.0f}/mo; consider waiting for rate cycle reversal",                       "direction": "negative"},
-    ]
     return {"signal":s,"cls":c,"reasons":reasons,"metrics":metrics,
-            "key_takeaway": kt, "sensitivity": sensitivity,
             "source":f"RBI rate cycle analysis. Repo rate: {REPO_RATE}%","context":"Location beats timing in real estate. Buy right, not just cheap."}
 
 def sig_fd():
@@ -807,24 +680,8 @@ def sig_midcap(stocks):
         "Historical CAGR":     "~14% (15yr avg, past performance not guaranteed)",
         "Volatility vs Nifty": "2–3× higher — size positions smaller than large-cap",
     }
-    if s == "BUY":
-        kt = (f"Nifty Midcap 150 is in correction — historically, buying midcap on 15–25% dips has delivered 18–22% CAGR over 5 years. "
-              f"Deploy in 3–4 tranches over 6 weeks; use Motilal Oswal or Nippon Nifty Midcap 150 Index Funds.")
-    elif s == "WAIT":
-        kt = (f"Midcap RSI signals overbought — the easy gains are priced in and late buyers are taking the risk. "
-              f"Pause lump-sum; continue monthly SIP only and wait for RSI to cool below 60 before fresh deployment.")
-    else:
-        below = mc.get("below_52wk_high", 0)
-        kt = (f"Nifty Midcap 150 is in healthy uptrend with {below:.1f}% runway below its 52-week high — no action needed. "
-              f"Keep monthly SIP running; midcap wealth is built over years, not weeks. Rebalance once a year.")
-    sensitivity = [
-        {"scenario": "If Nifty 50 corrects 10%",        "impact": "Midcap typically corrects 15–20%; stay invested via SIP — this is expected volatility", "direction": "negative"},
-        {"scenario": "If midcap RSI drops below 35",    "impact": "Strong oversold signal — historically median 12-month return = +35% from this level",    "direction": "positive"},
-        {"scenario": "If small/midcap P/E premium narrows", "impact": "Midcap allocation becomes more attractive vs large-cap; increase SIP ratio",         "direction": "positive"},
-    ]
     return {
         "signal": s, "cls": c, "reasons": reasons, "metrics": metrics,
-        "key_takeaway": kt, "sensitivity": sensitivity,
         "source": "Yahoo Finance (^NSMIDCP)",
         "context": "Midcap is a 5–10yr game. Never check it daily. SIP every month, rebalance once a year.",
     }
@@ -869,18 +726,8 @@ def sig_ppf_nps_elss():
         "Tax status (PPF)":     "EEE — invest exempt, interest exempt, maturity exempt",
         "FD equivalent yield":  f"PPF {PPF_RATE}% = FD {PPF_RATE/(1-0.30):.2f}% pre-tax (30% slab)",
     }
-    ppf_equiv_fd = round(PPF_RATE / (1 - 0.30), 2)
-    ppf_real = PPF_RATE - _rate("cpi_inflation")[0]
-    kt = (f"PPF at {PPF_RATE}% is fully tax-free (EEE) — equivalent to a pre-tax FD of {ppf_equiv_fd}% for a 30% tax-bracket investor. "
-          f"Maximise your ₹1.5L PPF contribution before March 31 every year; it is the single most tax-efficient guaranteed instrument in India.")
-    sensitivity = [
-        {"scenario": "If PPF rate cut 0.1% to 7.0%",   "impact": f"Still equivalent to a {round(7.0/0.7,2)}% pre-tax FD — remains superior to any bank FD",          "direction": "neutral"},
-        {"scenario": "If inflation drops to 4%",        "impact": f"PPF real return improves to {PPF_RATE-4:.1f}% — even more attractive; increase contributions",       "direction": "positive"},
-        {"scenario": "If 80C limit raised to ₹2.0L",   "impact": "PPF capacity expands ₹50K — file intent with bank before April 1 to claim increased deduction",      "direction": "positive"},
-    ]
     return {
         "signal": s, "cls": c, "reasons": reasons, "metrics": metrics,
-        "key_takeaway": kt, "sensitivity": sensitivity,
         "source": "Finmin (PPF) · PFRDA (NPS) · SEBI (ELSS)",
         "context": (
             "For a 10yr horizon: max PPF every year > NPS 80CCD(1B) > ELSS SIP. "
@@ -1425,47 +1272,8 @@ def render_signal_detail(asset_name, sig):
             f'</div>'
         )
 
-    # ── Key Takeaway banner (Feature 1) ────────────────────────
-    kt = sig.get("key_takeaway", "")
-    kt_cls   = {"buy":"kt-buy","hold":"kt-hold","wait":"kt-wait"}.get(sig["cls"],"kt-hold")
-    kt_icon  = {"buy":"&#9654;","hold":"&#8212;","wait":"&#9650;"}.get(sig["cls"],"&#8212;")
-    kt_html  = ""
-    if kt:
-        kt_html = (
-            f'<div class="key-takeaway {kt_cls}">'
-            f'  <div class="kt-header"><span class="kt-icon">{kt_icon}</span><span class="kt-label">KEY TAKEAWAY</span>'
-            f'  <span class="kt-badge signal-badge {badge_cls}">{sig["signal"]}</span></div>'
-            f'  <div class="kt-body">{kt}</div>'
-            f'</div>'
-        )
-
-    # ── Sensitivity / What-If table (Feature 3) ─────────────────
-    sensitivity = sig.get("sensitivity", [])
-    sens_html = ""
-    if sensitivity:
-        rows = ""
-        for sc in sensitivity:
-            dir_cls  = {"positive":"sens-pos","negative":"sens-neg","neutral":"sens-neu"}.get(sc.get("direction","neutral"),"sens-neu")
-            dir_icon = {"positive":"&#9650;","negative":"&#9660;","neutral":"&#8212;"}.get(sc.get("direction","neutral"),"&#8212;")
-            rows += (
-                f'<tr>'
-                f'<td class="sens-td sens-scenario">{sc["scenario"]}</td>'
-                f'<td class="sens-td sens-impact">{sc["impact"]}</td>'
-                f'<td class="sens-td sens-dir {dir_cls}">{dir_icon}</td>'
-                f'</tr>'
-            )
-        sens_html = (
-            f'<div class="sens-panel">'
-            f'<div class="sens-label">&#128202; Sensitivity Analysis — What If?</div>'
-            f'<table class="sens-table"><thead><tr>'
-            f'<th class="sens-th">Scenario</th><th class="sens-th">Impact on this asset</th><th class="sens-th">Direction</th>'
-            f'</tr></thead><tbody>{rows}</tbody></table>'
-            f'</div>'
-        )
-
     return (
         f'<div class="signal-detail-panel" id="detail-{asset_name.lower().replace(" ","_").replace("/","_")}">'
-        f'{kt_html}'
         f'<div class="detail-header">'
         f'<div class="detail-title">{asset_name}</div>'
         f'<span class="signal-badge {badge_cls} detail-signal-large">{sig["signal"]}</span>'
@@ -1476,7 +1284,6 @@ def render_signal_detail(asset_name, sig):
         f'<div class="reasons-label">Signal Rationale</div>'
         f'{reasons_html}'
         f'</div>'
-        f'{sens_html}'
         f'{context_html}'
         f'<div class="disclaimer">Data source: {sig.get("source","")} · Educational only — not investment advice. Past performance is not indicative of future results.</div>'
         f'</div>'
@@ -1830,34 +1637,6 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
    kpi-row small, padding reduction, iOS input zoom, hero font
 ═══════════════════════════════════════════════ */
 
-
-/* ─ Key Takeaway banner (Feature 1 — "So What?" Filter) ─ */
-.key-takeaway{margin-bottom:1.1rem;border-radius:6px;padding:12px 15px;border:1.5px solid}
-.key-takeaway.kt-buy{background:#ecfdf5;border-color:rgba(5,150,105,.3)}
-.key-takeaway.kt-hold{background:#fffbeb;border-color:rgba(217,119,6,.3)}
-.key-takeaway.kt-wait{background:#fef2f2;border-color:rgba(220,38,38,.3)}
-.kt-header{display:flex;align-items:center;gap:7px;margin-bottom:6px}
-.kt-icon{font-size:10px}
-.kt-label{font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--label);flex:1}
-.kt-badge{font-size:9px!important;padding:2px 8px!important}
-.kt-body{font-size:13px;line-height:1.65;color:var(--navy);font-weight:500}
-/* ─ Sensitivity table (Feature 3 — Predictive Analysis) ─ */
-.sens-panel{margin-top:.9rem;border:1px solid var(--border);border-radius:6px;overflow:hidden}
-.sens-label{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--navy2);padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--border)}
-.sens-table{width:100%;border-collapse:collapse;font-size:12px}
-.sens-th{background:var(--bg);padding:7px 12px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--label);border-bottom:1px solid var(--border);text-align:left}
-.sens-td{padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text2);line-height:1.5}
-.sens-td:last-child{border-bottom:none}
-.sens-scenario{font-weight:600;color:var(--navy);min-width:160px}
-.sens-impact{color:var(--navy3)}
-.sens-dir{text-align:center;font-weight:700;font-size:13px;width:40px}
-.sens-pos{color:var(--green)}.sens-neg{color:var(--red)}.sens-neu{color:var(--muted)}
-/* ─ Data Quality / Staleness badge (Feature 2) ─ */
-.data-quality-badge{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:700;font-family:var(--mono);padding:2px 7px;border-radius:2px;letter-spacing:.05em}
-.dq-live{background:rgba(5,150,105,.1);color:var(--green);border:1px solid rgba(5,150,105,.3)}
-.dq-cached{background:rgba(217,119,6,.1);color:var(--amber);border:1px solid rgba(217,119,6,.3)}
-.dq-stale{background:rgba(220,38,38,.1);color:var(--red);border:1px solid rgba(220,38,38,.3)}
-.stale-warning{margin:.5rem 0;padding:7px 11px;background:rgba(220,38,38,.07);border-left:3px solid var(--red);border-radius:0 4px 4px 0;font-size:11px;color:var(--red);font-family:var(--mono)}
 /* Tablet (≤768px) */
 @media(max-width:768px){
   /* Section header: title + meta stack vertically */
@@ -1950,8 +1729,6 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
   <div class="strip-left">__MARKET_STATUS__
     <span class="strip-sep">·</span>
     <span>RBI Repo: <strong style="color:var(--amber)">__REPO_RATE__%</strong></span>
-    <span class="data-quality-badge __DATA_QUALITY_CLS__">__DATA_QUALITY_LABEL__</span>
-    __STALE_WARNINGS__
     <span class="strip-sep">·</span>
     <span>Data: CoinGecko &middot; NSE &middot; NYSE &middot; yFinance</span>
   </div>
@@ -2307,7 +2084,6 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
     <div class="calc-tabs-bar">
       <button class="calc-tab active" onclick="switchTab(this,'portfolio','holdings')">My Holdings</button>
       <button class="calc-tab" onclick="switchTab(this,'portfolio','alloc')">Asset Allocation</button>
-      <button class="calc-tab" onclick="switchTab(this,'portfolio','sip')">&#127919; Smart Invest Planner</button>
     </div>
 
     <!-- Holdings Tab -->
@@ -2362,183 +2138,6 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
         </div>
       </div>
     </div>
-
-    <!-- ═══ SMART INVEST PLANNER TAB ═══ -->
-    <div id="portfolio-sip" class="calc-inner" style="display:none">
-      <div style="padding:1.5rem;width:100%">
-
-        <!-- CSS only for this section -->
-        <style>
-        .sip-section{margin-bottom:1.5rem}
-        .sip-sec-title{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#0369a1;margin-bottom:.75rem;display:flex;align-items:center;gap:6px;}
-        .sip-sec-title::before{content:'//';font-family:'Fira Code',monospace;color:#94a3b8}
-        .sip-params{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:8px;padding:14px 16px;margin-bottom:1rem}
-        .sip-param-group{display:flex;flex-direction:column;gap:4px}
-        .sip-param-label{font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.07em}
-        .sip-param-input{background:#fff;border:1.5px solid #bae6fd;border-radius:6px;padding:8px 11px;font-family:'Fira Code',monospace;font-size:14px;color:#0c4a6e;font-weight:600;width:100%;outline:none}
-        .sip-param-input:focus{border-color:#0ea5e9}
-        .sip-param-select{background:#fff;border:1.5px solid #bae6fd;border-radius:6px;padding:8px 11px;font-family:'Outfit',sans-serif;font-size:13px;color:#0c4a6e;font-weight:600;width:100%;outline:none}
-        .sip-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:#bae6fd;border:1.5px solid #bae6fd;border-radius:8px;overflow:hidden;margin-bottom:1rem}
-        .sip-sum-cell{background:#fff;padding:11px 14px}
-        .sip-sum-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#64748b;margin-bottom:3px}
-        .sip-sum-val{font-size:17px;font-weight:800;font-family:'Fira Code',monospace;color:#0c4a6e}
-        .sip-sum-val.sky{color:#0ea5e9}.sip-sum-val.mint{color:#059669}.sip-sum-val.red{color:#dc2626}.sip-sum-val.amb{color:#d97706}
-        .sip-sum-sub{font-size:10px;color:#64748b;margin-top:1px}
-        .sip-add-row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px;align-items:end;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:8px;padding:12px 14px;margin-bottom:1rem}
-        .sip-add-btn{background:#0c4a6e;color:#fff;border:none;border-radius:6px;padding:9px 16px;font-family:'Outfit',sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s}
-        .sip-add-btn:hover{background:#0369a1}
-        .sip-table-wrap{border:1.5px solid #bae6fd;border-radius:8px;overflow:hidden;margin-bottom:1rem}
-        .sip-table{width:100%;border-collapse:collapse;font-size:12px}
-        .sip-th{background:#f0f9ff;padding:9px 12px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#0369a1;border-bottom:1.5px solid #bae6fd;text-align:left}
-        .sip-th.r{text-align:right}
-        .sip-td{padding:10px 12px;border-bottom:1px solid #e0f2fe;color:#334155;vertical-align:middle}
-        .sip-td.mono{font-family:'Fira Code',monospace;color:#0c4a6e;font-weight:600}
-        .sip-td.mint{color:#059669}.sip-td.red{color:#dc2626}.sip-td.sky{color:#0ea5e9}.sip-td.amb{color:#d97706}
-        .sip-td.r{text-align:right}
-        .sip-row-total{background:#f0fdf4;border-top:2px solid #10b981}
-        .sip-row-total .sip-td{font-weight:700;color:#059669}
-        .sip-bar-wrap{position:relative;height:7px;background:#e0f2fe;border-radius:4px;overflow:hidden;min-width:80px}
-        .sip-bar-fill{height:7px;border-radius:4px;transition:width .35s ease}
-        .sip-badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;font-family:'Fira Code',monospace;white-space:nowrap}
-        .sip-badge.over{background:#fef3c7;color:#92400e;border:1px solid rgba(217,119,6,.3)}
-        .sip-badge.under{background:#fee2e2;color:#991b1b;border:1px solid rgba(220,38,38,.25)}
-        .sip-badge.ok{background:#d1fae5;color:#065f46;border:1px solid rgba(16,185,129,.35)}
-        .sip-sug{background:#eff6ff;color:#1d4ed8;border:1px solid rgba(14,165,233,.3);border-radius:4px;padding:2px 8px;font-family:'Fira Code',monospace;font-size:11px;font-weight:600}
-        .sip-sug.mint{background:#d1fae5;color:#065f46;border-color:rgba(16,185,129,.35)}
-        .sip-sug.zero{background:#f1f5f9;color:#64748b;border-color:#e2e8f0}
-        .sip-act{font-size:10px;font-weight:700;padding:3px 9px;border-radius:4px;border:1px solid;cursor:pointer;font-family:'Outfit',sans-serif;background:transparent;transition:all .12s}
-        .sip-act.buy{color:#059669;border-color:rgba(16,185,129,.4)}.sip-act.buy:hover{background:#d1fae5}
-        .sip-act.hold{color:#d97706;border-color:rgba(217,119,6,.3)}.sip-act.rebal{color:#dc2626;border-color:rgba(220,38,38,.3)}
-        .sip-act.del{color:#94a3b8;border-color:#e2e8f0;font-size:11px}.sip-act.del:hover{color:#dc2626;border-color:rgba(220,38,38,.3)}
-        .sip-alert{border-radius:8px;padding:12px 16px;margin-bottom:1rem;display:flex;align-items:flex-start;gap:10px;font-size:12px;line-height:1.55}
-        .sip-alert.warn{background:#fef9c3;border:1.5px solid rgba(217,119,6,.35);color:#92400e}
-        .sip-alert.danger{background:#fee2e2;border:1.5px solid rgba(220,38,38,.3);color:#991b1b}
-        .sip-alert.info{background:#eff6ff;border:1.5px solid rgba(14,165,233,.3);color:#1d4ed8}
-        .sip-alert.ok{background:#ecfdf5;border:1.5px solid rgba(16,185,129,.3);color:#065f46}
-        .sip-insights{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:1rem}
-        .sip-ins{background:#fff;border:1.5px solid #bae6fd;border-radius:8px;padding:13px 15px}
-        .sip-ins.mint{border-left:4px solid #10b981;border-radius:0 8px 8px 0}.sip-ins.red{border-left:4px solid #dc2626;border-radius:0 8px 8px 0}.sip-ins.sky{border-left:4px solid #0ea5e9;border-radius:0 8px 8px 0}.sip-ins.amb{border-left:4px solid #d97706;border-radius:0 8px 8px 0}
-        .sip-ins-h{font-size:12px;font-weight:700;color:#0c4a6e;margin-bottom:5px}
-        .sip-ins-b{font-size:12px;color:#475569;line-height:1.55}
-        .sip-ins-b strong{color:#0c4a6e}
-        .color-dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;flex-shrink:0}
-        </style>
-
-        <!-- Params row -->
-        <div class="sip-section">
-          <div class="sip-sec-title">Investment Parameters</div>
-          <div class="sip-params">
-            <div class="sip-param-group">
-              <div class="sip-param-label">Monthly savings to invest (&#8377;)</div>
-              <input class="sip-param-input" id="sipMonthly" type="number" value="50000" min="0" step="1000" oninput="sipCalc()">
-            </div>
-            <div class="sip-param-group">
-              <div class="sip-param-label">Your age</div>
-              <input class="sip-param-input" id="sipAge" type="number" value="35" min="18" max="70" oninput="sipCalc()">
-            </div>
-            <div class="sip-param-group">
-              <div class="sip-param-label">Risk profile</div>
-              <select class="sip-param-select" id="sipRisk" onchange="sipCalc()">
-                <option value="moderate">Moderate</option>
-                <option value="aggressive">Aggressive</option>
-                <option value="conservative">Conservative</option>
-              </select>
-            </div>
-            <div class="sip-param-group">
-              <div class="sip-param-label">Rebalance alert threshold</div>
-              <select class="sip-param-select" id="sipThreshold" onchange="sipCalc()">
-                <option value="5">5% drift</option>
-                <option value="3">3% drift</option>
-                <option value="10">10% drift</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <!-- Alerts area -->
-        <div id="sipAlerts"></div>
-
-        <!-- Summary strip -->
-        <div class="sip-summary" id="sipSummary">
-          <div class="sip-sum-cell"><div class="sip-sum-label">Total portfolio</div><div class="sip-sum-val sky" id="sipTotalVal">&#8377;0</div><div class="sip-sum-sub" id="sipAssetCount">0 asset classes</div></div>
-          <div class="sip-sum-cell"><div class="sip-sum-label">Monthly SIP allocated</div><div class="sip-sum-val mint" id="sipMonthlyDisp">&#8377;0</div><div class="sip-sum-sub">Split shown below</div></div>
-          <div class="sip-sum-cell"><div class="sip-sum-label">Portfolio health</div><div class="sip-sum-val" id="sipHealthVal" style="color:#d97706">—</div><div class="sip-sum-sub" id="sipHealthLbl">Add assets to score</div></div>
-          <div class="sip-sum-cell"><div class="sip-sum-label">Target % total</div><div class="sip-sum-val" id="sipTargetSum" style="color:#0c4a6e">0%</div><div class="sip-sum-sub" id="sipTargetLbl">Should equal 100%</div></div>
-        </div>
-
-        <!-- Add asset row -->
-        <div class="sip-section">
-          <div class="sip-sec-title">Add / Edit Asset Class</div>
-          <div class="sip-add-row">
-            <div class="sip-param-group">
-              <div class="sip-param-label">Asset class name</div>
-              <input class="sip-param-input" id="sipAssetName" placeholder="e.g. Domestic Stock Market" style="font-family:'Outfit',sans-serif;font-size:13px">
-            </div>
-            <div class="sip-param-group">
-              <div class="sip-param-label">Current value (&#8377;)</div>
-              <input class="sip-param-input" id="sipAssetValue" type="number" placeholder="858581" min="0">
-            </div>
-            <div class="sip-param-group">
-              <div class="sip-param-label">Target %</div>
-              <input class="sip-param-input" id="sipAssetTarget" type="number" placeholder="25" min="0" max="100" step="0.5">
-            </div>
-            <div class="sip-param-group">
-              <div class="sip-param-label">Colour tag</div>
-              <input type="color" id="sipAssetColor" value="#0ea5e9" style="width:100%;height:36px;border:1.5px solid #bae6fd;border-radius:6px;padding:2px;cursor:pointer;background:#fff">
-            </div>
-            <div class="sip-param-group">
-              <div class="sip-param-label">&nbsp;</div>
-              <button class="sip-add-btn" onclick="sipAddAsset()">+ Add Asset</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Main allocation table -->
-        <div class="sip-section">
-          <div class="sip-sec-title">Allocation &amp; Monthly SIP Breakdown</div>
-          <div class="sip-table-wrap">
-            <table class="sip-table" id="sipTable">
-              <thead>
-                <tr>
-                  <th class="sip-th">Asset class</th>
-                  <th class="sip-th r">Value (&#8377;)</th>
-                  <th class="sip-th r">Current %</th>
-                  <th class="sip-th r">Target %</th>
-                  <th class="sip-th">Allocation</th>
-                  <th class="sip-th">Status</th>
-                  <th class="sip-th r">Monthly SIP</th>
-                  <th class="sip-th r">Gap vs target</th>
-                  <th class="sip-th">Action</th>
-                  <th class="sip-th"></th>
-                </tr>
-              </thead>
-              <tbody id="sipTbody"></tbody>
-              <tfoot id="sipTfoot"></tfoot>
-            </table>
-          </div>
-          <div id="sipEmpty" style="text-align:center;padding:2rem;color:#64748b;font-size:13px;display:none">
-            No assets added yet. Use the form above to add your asset classes.
-          </div>
-        </div>
-
-        <!-- Insights -->
-        <div class="sip-section">
-          <div class="sip-sec-title">Expert Insights</div>
-          <div class="sip-insights" id="sipInsights"></div>
-        </div>
-
-        <!-- Save / Load -->
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:.5rem">
-          <button onclick="sipSave()" style="background:#0ea5e9;color:#fff;border:none;border-radius:6px;padding:8px 18px;font-family:'Outfit',sans-serif;font-size:12px;font-weight:700;cursor:pointer">&#128190; Save portfolio</button>
-          <button onclick="sipLoad()" style="background:#fff;color:#0369a1;border:1.5px solid #bae6fd;border-radius:6px;padding:8px 18px;font-family:'Outfit',sans-serif;font-size:12px;font-weight:700;cursor:pointer">&#8635; Load saved</button>
-          <button onclick="sipClear()" style="background:#fff;color:#dc2626;border:1.5px solid rgba(220,38,38,.3);border-radius:6px;padding:8px 18px;font-family:'Outfit',sans-serif;font-size:12px;font-weight:700;cursor:pointer">&#128465; Clear all</button>
-          <span id="sipSaveMsg" style="display:none;font-size:11px;color:#059669;font-family:'Fira Code',monospace;align-self:center;padding-left:6px">&#10003; Saved</span>
-        </div>
-
-      </div>
-    </div>
-    <!-- ══════════════════════════════════════════ -->
-
   </div>
 </div>
 
@@ -3140,7 +2739,6 @@ function showSection(id){
   });
   if(id==='dashboard')renderDashboard();
   if(id==='portfolio'){ptRender();calcAlloc();}
-  if(tab==='sip'){sipCalc();}
   if(id==='invest')setTimeout(calcStepUp,100);
 }
 
@@ -3749,230 +3347,6 @@ function renderDashboard(){
   document.getElementById('dashScenarios').innerHTML='<div class="scenario-list"><div class="scenario-row"><span class="scenario-label">SIP '+fmtC(sip)+'/mo · '+yrs+' yrs @12%</span><span class="scenario-val green">'+fmtC(proj)+'</span></div><div class="scenario-row"><span class="scenario-label">FIRE Number (25× expenses)</span><span class="scenario-val '+(proj>=fireNum?'green':'amber')+'">'+fmtC(fireNum)+'</span></div><div class="scenario-row" style="background:rgba('+(proj>=fireNum?'0,192,127':'232,168,37')+',.05)"><span class="scenario-label">'+(proj>=fireNum?'Surplus over FIRE':'Gap to FIRE')+'</span><span class="scenario-val '+(proj>=fireNum?'green':'amber')+'">'+fmtC(Math.abs(proj-fireNum))+'</span></div><div class="scenario-row"><span class="scenario-label">If market crashes -30%</span><span class="scenario-val amber">'+fmtC((savings||0)*.7)+'</span></div></div>';
 }
 
-
-
-// ════════════════════════════════════════════════════════
-// SMART INVEST PLANNER
-// ════════════════════════════════════════════════════════
-var sipAssets = [];
-var SIP_COLORS = ['#0ea5e9','#10b981','#8b5cf6','#f59e0b','#ef4444','#6366f1','#ec4899','#14b8a6','#f97316','#84cc16','#06b6d4','#a855f7'];
-
-// Load persisted data
-try{const d=localStorage.getItem('fv_sip_assets');if(d)sipAssets=JSON.parse(d);}catch(e){}
-
-function sipPersist(){try{localStorage.setItem('fv_sip_assets',JSON.stringify(sipAssets));}catch(e){}}
-
-function sipFmtInr(n){
-  if(isNaN(n)||n===null)return '—';
-  n=Math.round(n);
-  if(Math.abs(n)>=1e7)return '&#8377;'+(n/1e7).toFixed(2)+' Cr';
-  if(Math.abs(n)>=1e5)return '&#8377;'+(n/1e5).toFixed(2)+' L';
-  return '&#8377;'+n.toLocaleString('en-IN');
-}
-
-function sipAddAsset(){
-  var name=(document.getElementById('sipAssetName').value||'').trim();
-  var val=parseFloat(document.getElementById('sipAssetValue').value)||0;
-  var tgt=parseFloat(document.getElementById('sipAssetTarget').value)||0;
-  var col=document.getElementById('sipAssetColor').value||SIP_COLORS[sipAssets.length%SIP_COLORS.length];
-  if(!name){alert('Please enter an asset class name.');return;}
-  if(val<0||tgt<0){alert('Values must be positive.');return;}
-  // Update existing or add new
-  var existing=sipAssets.find(function(a){return a.name.toLowerCase()===name.toLowerCase();});
-  if(existing){existing.value=val;existing.target=tgt;existing.color=col;}
-  else{sipAssets.push({id:Date.now(),name:name,value:val,target:tgt,color:col});}
-  sipPersist();
-  document.getElementById('sipAssetName').value='';
-  document.getElementById('sipAssetValue').value='';
-  document.getElementById('sipAssetTarget').value='';
-  document.getElementById('sipAssetColor').value=SIP_COLORS[sipAssets.length%SIP_COLORS.length];
-  sipCalc();
-}
-
-function sipRemove(id){
-  sipAssets=sipAssets.filter(function(a){return a.id!==id;});
-  sipPersist();sipCalc();
-}
-
-function sipCalc(){
-  var monthly=parseFloat(document.getElementById('sipMonthly').value)||0;
-  var threshold=parseFloat(document.getElementById('sipThreshold').value)||5;
-  var total=sipAssets.reduce(function(s,a){return s+a.value;},0);
-  var targetSum=sipAssets.reduce(function(s,a){return s+a.target;},0);
-  var tbody=document.getElementById('sipTbody');
-  var tfoot=document.getElementById('sipTfoot');
-  var emptyEl=document.getElementById('sipEmpty');
-  var alertsEl=document.getElementById('sipAlerts');
-
-  // Summary strip
-  document.getElementById('sipTotalVal').innerHTML=sipFmtInr(total);
-  document.getElementById('sipAssetCount').textContent=sipAssets.length+' asset class'+(sipAssets.length!==1?'es':'');
-  document.getElementById('sipMonthlyDisp').innerHTML=sipFmtInr(monthly);
-  var tsEl=document.getElementById('sipTargetSum');
-  tsEl.textContent=targetSum.toFixed(1)+'%';
-  tsEl.style.color=Math.abs(targetSum-100)<0.5?'#059669':targetSum>100?'#dc2626':'#d97706';
-  document.getElementById('sipTargetLbl').textContent=Math.abs(targetSum-100)<0.5?'Perfect — sums to 100%':targetSum>100?'⚠ Over 100% — reduce targets':'⚠ Under 100% — increase targets';
-
-  if(!sipAssets.length){
-    if(tbody)tbody.innerHTML='';if(tfoot)tfoot.innerHTML='';
-    emptyEl.style.display='block';
-    alertsEl.innerHTML='';
-    document.getElementById('sipInsights').innerHTML='<div style="color:#64748b;font-size:13px;padding:1rem 0">Add your asset classes above to get personalised investment suggestions.</div>';
-    document.getElementById('sipHealthVal').textContent='—';
-    document.getElementById('sipHealthLbl').textContent='Add assets to score';
-    return;
-  }
-  emptyEl.style.display='none';
-
-  // Per-asset calcs
-  var assets=sipAssets.map(function(a){
-    var curPct=total>0?(a.value/total*100):0;
-    var gap=a.target-curPct;
-    return Object.assign({},a,{curPct:curPct,gap:gap});
-  });
-
-  // Distribute monthly SIP: proportional to positive gap only
-  var totalGap=assets.reduce(function(s,a){return s+(a.gap>0?a.gap:0);},0);
-  assets.forEach(function(a){
-    a.monthlySuggested=totalGap>0&&a.gap>0?(a.gap/totalGap)*monthly:0;
-  });
-
-  // Render table rows
-  var rows='';
-  assets.forEach(function(a){
-    var barWidth=total>0?Math.min(100,(a.value/total*100)/(a.target||1)*100):0;
-    barWidth=Math.min(100,barWidth);
-    var statusBadge='';
-    var actionBtn='';
-    var sipClass='sip-sug';
-    var sipText='';
-    var gapSign=a.gap>=0?'+':'';
-    var gapCls=a.gap<-threshold?'red':a.gap>threshold?'amb':'mint';
-
-    if(Math.abs(a.gap)<=threshold){
-      statusBadge='<span class="sip-badge ok">&#10003; On target</span>';
-      actionBtn='<button class="sip-act hold">HOLD</button>';
-      sipClass='sip-sug zero';sipText='&#8377;0 — hold';
-    } else if(a.gap>threshold){
-      statusBadge='<span class="sip-badge under">&#9660; '+Math.abs(a.gap).toFixed(1)+'% under</span>';
-      actionBtn='<button class="sip-act buy">BUY &#8599;</button>';
-      sipClass='sip-sug mint';sipText=sipFmtInr(a.monthlySuggested);
-    } else {
-      statusBadge='<span class="sip-badge over">&#9650; '+Math.abs(a.gap).toFixed(1)+'% over</span>';
-      actionBtn='<button class="sip-act rebal">REBALANCE</button>';
-      sipClass='sip-sug zero';sipText='&#8377;0 — stop/redeploy';
-    }
-
-    rows+='<tr>'
-      +'<td class="sip-td"><span class="color-dot" style="background:'+a.color+'"></span><strong>'+a.name+'</strong></td>'
-      +'<td class="sip-td mono r">'+sipFmtInr(a.value)+'</td>'
-      +'<td class="sip-td mono r">'+a.curPct.toFixed(2)+'%</td>'
-      +'<td class="sip-td mono r">'+a.target+'%</td>'
-      +'<td class="sip-td"><div class="sip-bar-wrap"><div class="sip-bar-fill" style="width:'+barWidth+'%;background:'+a.color+'"></div></div></td>'
-      +'<td class="sip-td">'+statusBadge+'</td>'
-      +'<td class="sip-td r"><span class="'+sipClass+'">'+sipText+'</span></td>'
-      +'<td class="sip-td mono r '+gapCls+'">'+(a.gap>=0?'+':'')+a.gap.toFixed(1)+'%</td>'
-      +'<td class="sip-td">'+actionBtn+'</td>'
-      +'<td class="sip-td"><button class="sip-act del" onclick="sipRemove('+a.id+')">&#10005;</button></td>'
-      +'</tr>';
-  });
-  if(tbody)tbody.innerHTML=rows;
-
-  // Total footer row
-  var totalSip=assets.reduce(function(s,a){return s+a.monthlySuggested;},0);
-  var footHtml='<tr class="sip-row-total">'
-    +'<td class="sip-td" style="font-size:13px;font-weight:800;color:#059669">TOTAL PORTFOLIO</td>'
-    +'<td class="sip-td mono r" style="font-size:14px;font-weight:800;color:#059669">'+sipFmtInr(total)+'</td>'
-    +'<td class="sip-td mono r">100%</td>'
-    +'<td class="sip-td mono r '+(Math.abs(targetSum-100)<0.5?'mint':targetSum>100?'red':'amb')+'" style="font-weight:700">'+targetSum.toFixed(1)+'%</td>'
-    +'<td class="sip-td"></td>'
-    +'<td class="sip-td" style="font-size:11px;color:#059669;font-weight:700">'+(totalGap>0?'&#8592; Rebalance needed':'&#10003; Portfolio balanced')+'</td>'
-    +'<td class="sip-td r"><span class="sip-sug mint" style="font-size:12px">'+sipFmtInr(totalSip)+'</span></td>'
-    +'<td class="sip-td" colspan="3"></td>'
-    +'</tr>';
-  if(tfoot)tfoot.innerHTML=footHtml;
-
-  // ── Health score (0-100) ──
-  var overCount=assets.filter(function(a){return a.gap<-threshold;}).length;
-  var underCount=assets.filter(function(a){return a.gap>threshold;}).length;
-  var targetOk=Math.abs(targetSum-100)<0.5;
-  var health=100;
-  health-=overCount*10;
-  health-=underCount*8;
-  if(!targetOk)health-=15;
-  var cashAsset=assets.find(function(a){return /cash|liquid/i.test(a.name);});
-  if(cashAsset&&cashAsset.curPct>20)health-=15;
-  var loanAsset=assets.find(function(a){return /loan|lend/i.test(a.name);});
-  if(loanAsset&&loanAsset.curPct>5)health-=10;
-  health=Math.max(0,Math.min(100,health));
-  var hEl=document.getElementById('sipHealthVal');
-  hEl.textContent=health+' / 100';
-  hEl.style.color=health>=75?'#059669':health>=50?'#d97706':'#dc2626';
-  document.getElementById('sipHealthLbl').textContent=health>=75?'Healthy portfolio':health>=50?'Needs rebalancing':'Urgent action needed';
-
-  // ── Alerts ──
-  var alerts='';
-  if(!targetOk){
-    if(targetSum>100)alerts+='<div class="sip-alert danger">&#9888;&nbsp; Your target percentages add up to <strong>'+targetSum.toFixed(1)+'%</strong> — they must total exactly 100%. Please reduce some targets before SIP suggestions will be accurate.</div>';
-    else alerts+='<div class="sip-alert warn">&#9888;&nbsp; Your target percentages add up to only <strong>'+targetSum.toFixed(1)+'%</strong>. Increase targets to 100% total for accurate suggestions.</div>';
-  }
-  if(cashAsset&&cashAsset.curPct>20)alerts+='<div class="sip-alert warn">&#128201;&nbsp; <strong>Cash / Liquid is '+cashAsset.curPct.toFixed(1)+'% of your portfolio</strong> — that's ₹'+Math.round(cashAsset.value).toLocaleString('en-IN')+' sitting idle. Redirect 2–3 months of savings to equity before adding new cash.</div>';
-  if(loanAsset&&loanAsset.curPct>5)alerts+='<div class="sip-alert danger">&#9888;&nbsp; <strong>Loan to friends/family is '+loanAsset.curPct.toFixed(1)+'% of your portfolio</strong>. This carries counterparty risk and earns informal interest. Consider recovering it and reinvesting in regulated instruments.</div>';
-  var bigAsset=assets.find(function(a){return a.curPct>35;});
-  if(bigAsset)alerts+='<div class="sip-alert warn">&#9888;&nbsp; <strong>'+bigAsset.name+' at '+bigAsset.curPct.toFixed(1)+'%</strong> — single-asset concentration above 35% creates risk. Diversify before adding more here.</div>';
-  if(health>=80&&!alerts)alerts='<div class="sip-alert ok">&#10003;&nbsp; Your portfolio is well-balanced. Keep your SIPs running and rebalance annually.</div>';
-  alertsEl.innerHTML=alerts;
-
-  // ── Expert insights ──
-  var sorted=[].concat(assets).sort(function(a,b){return b.gap-a.gap;});
-  var top3Under=sorted.filter(function(a){return a.gap>threshold;}).slice(0,3);
-  var top2Over=sorted.filter(function(a){return a.gap<-threshold;}).reverse().slice(0,2);
-  var ins='';
-  if(top3Under.length){
-    var pri=top3Under[0];
-    ins+='<div class="sip-ins mint"><div class="sip-ins-h">&#127919; Top priority this month</div><div class="sip-ins-b">Put <strong>'+sipFmtInr(pri.monthlySuggested)+' into '+pri.name+'</strong>. You are '+pri.gap.toFixed(1)+'% below your '+pri.target+'% target — the biggest gap in your portfolio.</div></div>';
-  }
-  if(top2Over.length){
-    var over1=top2Over[0];
-    ins+='<div class="sip-ins red"><div class="sip-ins-h">&#9888; Stop investing here</div><div class="sip-ins-b"><strong>'+over1.name+' is '+Math.abs(over1.gap).toFixed(1)+'% over target</strong>. Add &#8377;0 here. If possible, redeploy some of it into your under-allocated assets.</div></div>';
-  }
-  if(!targetOk&&targetSum>100){
-    ins+='<div class="sip-ins amb"><div class="sip-ins-h">&#128202; Fix your targets first</div><div class="sip-ins-b">Targets total <strong>'+targetSum.toFixed(1)+'%</strong> — must equal 100%. Reduce Loan for Interest and Liquid targets, then recalculate SIP.</div></div>';
-  } else if(monthly>0&&top3Under.length>=2){
-    var rem=top3Under.slice(1);
-    var remText=rem.map(function(a){return a.name+' ('+sipFmtInr(a.monthlySuggested)+')'}).join(', ');
-    ins+='<div class="sip-ins sky"><div class="sip-ins-h">&#128200; Next priorities</div><div class="sip-ins-b">After top priority, allocate remaining SIP to: <strong>'+remText+'</strong>.</div></div>';
-  }
-  if(cashAsset&&cashAsset.value>500000){
-    ins+='<div class="sip-ins amb"><div class="sip-ins-h">&#128176; Deploy idle cash</div><div class="sip-ins-b">You have <strong>'+sipFmtInr(cashAsset.value)+' in '+cashAsset.name+'</strong>. Move &#8377;10–15K/month into equity index funds via SIP instead of adding more cash.</div></div>';
-  }
-  if(!ins)ins='<div class="sip-ins sky"><div class="sip-ins-h">&#128200; Add more assets</div><div class="sip-ins-b">Add your real portfolio holdings above to get personalised monthly investment suggestions and rebalancing alerts.</div></div>';
-  document.getElementById('sipInsights').innerHTML=ins;
-}
-
-function sipSave(){
-  sipPersist();
-  var msg=document.getElementById('sipSaveMsg');
-  msg.style.display='inline';
-  setTimeout(function(){msg.style.display='none';},2000);
-}
-
-function sipLoad(){
-  try{
-    var d=localStorage.getItem('fv_sip_assets');
-    if(d){sipAssets=JSON.parse(d);sipCalc();alert('Portfolio loaded from browser storage.');}
-    else{alert('No saved portfolio found.');}
-  }catch(e){alert('Load failed: '+e.message);}
-}
-
-function sipClear(){
-  if(!confirm('Clear all assets from the planner? This cannot be undone.'))return;
-  sipAssets=[];sipPersist();sipCalc();
-}
-
-// Auto-init when tab becomes visible
-document.addEventListener('DOMContentLoaded',function(){if(sipAssets.length)sipCalc();});
-
 // ════════ INIT ════════
 document.addEventListener('DOMContentLoaded',()=>{
   calcSIP();calcLS();calcGoal();calcROI();calcScenario();
@@ -4149,22 +3523,6 @@ def build_html(crypto_data, stocks_data, signals, ticker_html, updated_at, marke
     html = html.replace("__SIDEBAR_ITEMS__",        sidebar_html)
     html = html.replace("__SIGNAL_DETAILS__",       details_html)
     html = html.replace("__PORTFOLIO_BUILDER__",    portfolio_builder_html)
-    # ── Data quality badges (Feature 2) ──────────────────────────
-    dq_live  = _RATES.get("repo_live", False)
-    dq_stale = _RATES.get("repo_rate_stale", False)
-    if dq_live:
-        dq_cls, dq_lbl = "dq-live",   "● LIVE RATES"
-    elif dq_stale:
-        dq_cls, dq_lbl = "dq-stale",  "⚠ RATES STALE"
-    else:
-        dq_cls, dq_lbl = "dq-cached", "● CACHED RATES"
-    stale_warnings_html = ""
-    for err in _RATES.get("_errors", []):
-        if "STALE" in err:
-            stale_warnings_html += f'<div class="stale-warning">⚠ {err}</div>'
-    html = html.replace("__DATA_QUALITY_CLS__",   dq_cls)
-    html = html.replace("__DATA_QUALITY_LABEL__", dq_lbl)
-    html = html.replace("__STALE_WARNINGS__",     stale_warnings_html)
     # ── Inject Firebase frontend config from environment variables ──
     html = html.replace("__FIREBASE_API_KEY__",            os.environ.get("FIREBASE_API_KEY", ""))
     html = html.replace("__FIREBASE_AUTH_DOMAIN__",        os.environ.get("FIREBASE_AUTH_DOMAIN", ""))
@@ -4189,7 +3547,7 @@ def build_html(crypto_data, stocks_data, signals, ticker_html, updated_at, marke
 # ─────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(description="FinVault Pro Static Site Generator")
-    parser.add_argument("--dry", action="store_true", help="Print data, do not write file")
+    parser.add_argument("--dry", action="store_true", help="Print data, don't write file")
     args = parser.parse_args()
 
     print("🔄 FinVault Pro Site Generator")
@@ -4202,18 +3560,6 @@ def main():
         print(f"  ⚠ Live crypto fetch failed: {e}")
         crypto_data, _ = load_lkg()
 
-    global REPO_RATE, PREV_REPO, HOME_LOAN, _RATES
-    print("🔄 Fetching dynamic macro rates (repo, PPF, inflation)...")
-    _RATES = fetch_dynamic_rates()
-    REPO_RATE = _RATES.get("repo_rate", REPO_RATE)
-    PREV_REPO = _RATES.get("prev_repo", PREV_REPO)
-    HOME_LOAN = _RATES.get("home_loan", HOME_LOAN)
-    if _RATES.get("repo_live"):
-        print(f"  ✅ LIVE repo rate: {REPO_RATE}%")
-    else:
-        stale = _RATES.get("repo_rate_stale", False)
-        days  = _RATES.get("repo_rate_days_old", 0)
-        print(f"  {'⚠ STALE' if stale else '📦 Cached'} repo rate: {REPO_RATE}% ({days} days old)")
     print("📈 Fetching stock data (Nifty, S&P 500, NASDAQ, Midcap 150, ETFs)...")
     try:
         stocks_data = fetch_stocks()
