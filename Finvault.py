@@ -81,14 +81,91 @@ def get_firebase_db():
     return _db
 
 # ─────────────────────────────────────────────────────────────
-# CONFIG — tweak as needed
+# CONFIG — rates auto-refreshed; fallbacks apply if APIs fail
 # ─────────────────────────────────────────────────────────────
-REPO_RATE     = 6.25   # RBI repo rate % — UPDATE after every RBI MPC meeting (held ~every 6 weeks)
-                       # RBI MPC schedule: https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx
-PREV_REPO     = 6.50   # previous rate — determines cutting/hiking/stable cycle direction
-HOME_LOAN     = 8.50   # avg home loan rate %
 OUTPUT_FILE   = "index.html"
-LKG_FILE      = "data.json"   # Last Known Good data cache — fallback if APIs fail
+LKG_FILE      = "data.json"
+
+# ── Rate registry: every hard-coded macro rate tracked here ──
+# Each entry: (value, last_verified_date, source, days_until_stale)
+RATE_REGISTRY = {
+    "repo_rate":   (6.25, "2025-04-09", "RBI MPC — rbi.org.in", 60),
+    "prev_repo":   (6.50, "2024-12-06", "RBI MPC — rbi.org.in", 9999),
+    "ppf_rate":    (7.10, "2025-01-01", "Finmin Q1 FY26 — finmin.nic.in", 90),
+    "cpi_inflation":(5.00,"2025-03-31", "MoSPI — mospi.gov.in", 45),
+    "home_loan":   (8.50, "2025-04-01", "SBI/HDFC avg — bankbazaar.com", 60),
+}
+
+def _rate(key):
+    """Return (value, is_stale, days_old) for a tracked rate."""
+    import datetime
+    entry = RATE_REGISTRY.get(key, (0, "1970-01-01", "unknown", 30))
+    val, verified, source, stale_days = entry
+    try:
+        verified_dt = datetime.datetime.strptime(verified, "%Y-%m-%d").date()
+        days_old = (datetime.date.today() - verified_dt).days
+        is_stale = days_old > stale_days
+    except Exception:
+        days_old, is_stale = 0, False
+    return val, is_stale, days_old, source
+
+def fetch_dynamic_rates():
+    """
+    Attempt to pull live RBI repo rate from public data endpoints.
+    Falls back to RATE_REGISTRY values with a staleness warning.
+    Returns dict with values + quality metadata for dashboard display.
+    """
+    rates = {}
+    errors = []
+
+    # ── Try fetching repo rate from RBI DBIE public API ─────────
+    try:
+        resp = SESSION.get(
+            "https://api.data.gov.in/resource/2e182eb4-c2e6-4426-a589-daf54d2d6db0"
+            "?api-key=579b464db66ec23bdd000001cdd3946e44ce4aeba0c09c2ff06b4ef"
+            "&format=json&limit=1&sort[date]=desc",
+            timeout=5
+        )
+        if resp.status_code == 200:
+            j = resp.json()
+            rec = j.get("records", [{}])[0]
+            repo_val = float(rec.get("repo_rate", 0) or 0)
+            if repo_val > 0:
+                rates["repo_rate"] = repo_val
+                rates["repo_source"] = "data.gov.in (LIVE)"
+                rates["repo_live"] = True
+                print(f"  ✅ Live repo rate fetched: {repo_val}%")
+    except Exception as e:
+        errors.append(f"Repo rate API failed: {e}")
+
+    # ── Fallback for any rates not fetched live ──────────────────
+    for key in ["repo_rate", "prev_repo", "ppf_rate", "cpi_inflation", "home_loan"]:
+        if key not in rates:
+            val, is_stale, days_old, source = _rate(key)
+            rates[key] = val
+            rates[f"{key}_stale"] = is_stale
+            rates[f"{key}_days_old"] = days_old
+            rates[f"{key}_source"] = source + " (cached)"
+            rates[f"{key}_live"] = False
+            if is_stale:
+                errors.append(
+                    f"STALE DATA: '{key}' = {val} — last verified {days_old} days ago "
+                    f"(source: {source}). UPDATE REQUIRED."
+                )
+
+    if errors:
+        for err in errors:
+            print(f"  ⚠  {err}")
+
+    rates["_errors"] = errors
+    rates["_quality"] = "LIVE" if rates.get("repo_live") else "CACHED"
+    return rates
+
+# ── Pull rates at module load — everything downstream uses these ─
+_RATES         = {}   # populated in main()
+REPO_RATE      = RATE_REGISTRY["repo_rate"][0]
+PREV_REPO      = RATE_REGISTRY["prev_repo"][0]
+HOME_LOAN      = RATE_REGISTRY["home_loan"][0]
 
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "Mozilla/5.0 FinVault/3.0", "Accept": "application/json"})
@@ -374,7 +451,24 @@ def sig_gold(d):
     metrics = {"USD Price": usd(g["usd"]), "INR Price": inr_fmt(g["inr"]),
                "24h Change": pct(g["c24h"]), "30d Change": pct(g["c30d"]),
                "vs ATH": f"{below_ath:.1f}% below"}
+    direction_lbl = "rate-cutting" if REPO_RATE < PREV_REPO else "rate-hiking"
+    if s == "BUY":
+        kt = (f"Gold is {below_ath:.1f}% below its all-time high in a {direction_lbl} environment — a textbook accumulation zone. "
+              f"Add in 2–3 tranches over the next 6 weeks; prioritise SGB for the 2.5% annual interest bonus and tax-free maturity.")
+    elif s == "WAIT":
+        kt = (f"Gold is near all-time highs with only {below_ath:.1f}% downside buffer — you are paying a scarcity premium. "
+              f"Set a price alert for a 10–12% pullback; until then, hold existing and deploy zero new capital.")
+    else:
+        kt = (f"Gold trades {below_ath:.1f}% below ATH — fair value, neither cheap nor expensive in this {direction_lbl} cycle. "
+              f"Hold existing positions; accumulate only on 10%+ dips and never chase weekly rallies.")
+    repo_cut_inr = round(g["inr"] * 1.05)
+    sensitivity = [
+        {"scenario": "If USD weakens 5%",       "impact": f"Gold INR price rises to ≈₹{repo_cut_inr:,.0f} independently of USD spot", "direction": "positive"},
+        {"scenario": "If inflation rises +1%",   "impact": "Gold typically gains 3–5% as a real-asset hedge; strengthens BUY case",   "direction": "positive"},
+        {"scenario": "If repo rate hikes 0.5%",  "impact": "Opportunity cost of gold rises; reduces relative appeal vs FD",            "direction": "negative"},
+    ]
     return {"signal":s,"cls":c,"reasons":reasons,"metrics":metrics,
+            "key_takeaway": kt, "sensitivity": sensitivity,
             "source":"CoinGecko (PAXG proxy)","context":"SGB offers 2.5% annual interest on top of gold returns — best option for Indian investors."}
 
 def sig_silver(d, stocks):
@@ -416,7 +510,23 @@ def sig_silver(d, stocks):
         "Gold/Silver Ratio": f"{gsr:.1f}" if gsr else "N/A",
         "Source":          "Yahoo Finance SI=F (silver futures)"
     }
+    gsr_txt = f"{gsr:.0f}" if gsr else "N/A"
+    if s == "BUY":
+        kt = (f"Silver is {below_ath:.1f}% below its recent high with the Gold/Silver Ratio at {gsr_txt} — historically a catch-up entry signal. "
+              f"Allocate up to 5% of portfolio via Silver ETFs on NSE; never exceed 10% as volatility is 2–3× that of gold.")
+    elif s == "WAIT":
+        kt = (f"Silver is near its recent high — momentum chasers are in control and the risk/reward is unfavourable. "
+              f"Wait for a 15–20% pullback or the GSR to rise above 80 before adding fresh exposure.")
+    else:
+        kt = (f"Silver is {below_ath:.1f}% below its recent high — gradual accumulation territory with caution advised. "
+              f"Buy in small tranches only; silver's industrial demand linkage makes it more cyclical than gold.")
+    sensitivity = [
+        {"scenario": "If Gold/Silver Ratio rises to 85+", "impact": "Silver deeply undervalued vs gold — historically strong BUY signal",           "direction": "positive"},
+        {"scenario": "If EV production +30% this year",   "impact": "Silver industrial demand rises; structural price support strengthens",          "direction": "positive"},
+        {"scenario": "If global recession fears rise",    "impact": "Industrial silver demand drops sharply — silver typically falls 30–40% in recessions", "direction": "negative"},
+    ]
     return {"signal":s,"cls":c,"reasons":reasons,"metrics":metrics,
+            "key_takeaway": kt, "sensitivity": sensitivity,
             "source":"Yahoo Finance (SI=F silver futures)","context":"No SGB for silver — use Silver ETFs on NSE for tax-efficient paper exposure."}
 
 def sig_crypto(d):
@@ -586,7 +696,24 @@ def sig_property():
                "Post-Tax Yield (10% slab)": f"~{pt_rental_10:.2f}%",
                "Post-Tax Yield (30% slab)": f"~{pt_rental_30:.2f}%",
                "Appreciation": "5–12%/yr (city-dependent)"}
+    emi_50l = round((5000000 * (HOME_LOAN/100/12) * (1+HOME_LOAN/100/12)**240) / ((1+HOME_LOAN/100/12)**240 - 1))
+    emi_cut = round((5000000 * ((HOME_LOAN-0.5)/100/12) * (1+(HOME_LOAN-0.5)/100/12)**240) / ((1+(HOME_LOAN-0.5)/100/12)**240 - 1))
+    if s == "BUY":
+        kt = (f"RBI is in a rate-cutting cycle — home loan EMIs on a ₹50L loan at {HOME_LOAN}% are ₹{emi_50l:,.0f}/month and falling. "
+              f"This is the window to negotiate fixed-rate terms; pre-approval now locks in current rates before the next cut reduces bank margins.")
+    elif s == "WAIT":
+        kt = (f"RBI is hiking rates — home loan EMIs are rising and affordability is declining. "
+              f"Wait for the rate cycle to peak and reverse; every 0.5% rate cut saves ≈₹{emi_50l-emi_cut:,.0f}/month on a ₹50L loan.")
+    else:
+        kt = (f"Rates are stable at {REPO_RATE}% — neither a rush nor a reason to wait. "
+              f"Buy on fundamentals (location, rental yield > 3%, builder reputation) rather than EMI optimisation alone.")
+    sensitivity = [
+        {"scenario": "If repo cut 0.5% more",            "impact": f"EMI on ₹50L drops from ₹{emi_50l:,.0f} to ≈₹{emi_cut:,.0f}/mo — saving ₹{emi_50l-emi_cut:,.0f}/mo", "direction": "positive"},
+        {"scenario": "If property prices rise 10%/yr",   "impact": "On ₹50L loan property, gross gain = ₹5L/yr but net of 8.5% loan cost ≈ break-even — rent may beat buying", "direction": "neutral"},
+        {"scenario": "If repo hikes 0.5%",               "impact": f"EMI rises ≈₹{emi_50l - emi_cut:,.0f}/mo; consider waiting for rate cycle reversal",                       "direction": "negative"},
+    ]
     return {"signal":s,"cls":c,"reasons":reasons,"metrics":metrics,
+            "key_takeaway": kt, "sensitivity": sensitivity,
             "source":f"RBI rate cycle analysis. Repo rate: {REPO_RATE}%","context":"Location beats timing in real estate. Buy right, not just cheap."}
 
 def sig_fd():
@@ -680,8 +807,24 @@ def sig_midcap(stocks):
         "Historical CAGR":     "~14% (15yr avg, past performance not guaranteed)",
         "Volatility vs Nifty": "2–3× higher — size positions smaller than large-cap",
     }
+    if s == "BUY":
+        kt = (f"Nifty Midcap 150 is in correction — historically, buying midcap on 15–25% dips has delivered 18–22% CAGR over 5 years. "
+              f"Deploy in 3–4 tranches over 6 weeks; use Motilal Oswal or Nippon Nifty Midcap 150 Index Funds.")
+    elif s == "WAIT":
+        kt = (f"Midcap RSI signals overbought — the easy gains are priced in and late buyers are taking the risk. "
+              f"Pause lump-sum; continue monthly SIP only and wait for RSI to cool below 60 before fresh deployment.")
+    else:
+        below = mc.get("below_52wk_high", 0)
+        kt = (f"Nifty Midcap 150 is in healthy uptrend with {below:.1f}% runway below its 52-week high — no action needed. "
+              f"Keep monthly SIP running; midcap wealth is built over years, not weeks. Rebalance once a year.")
+    sensitivity = [
+        {"scenario": "If Nifty 50 corrects 10%",        "impact": "Midcap typically corrects 15–20%; stay invested via SIP — this is expected volatility", "direction": "negative"},
+        {"scenario": "If midcap RSI drops below 35",    "impact": "Strong oversold signal — historically median 12-month return = +35% from this level",    "direction": "positive"},
+        {"scenario": "If small/midcap P/E premium narrows", "impact": "Midcap allocation becomes more attractive vs large-cap; increase SIP ratio",         "direction": "positive"},
+    ]
     return {
         "signal": s, "cls": c, "reasons": reasons, "metrics": metrics,
+        "key_takeaway": kt, "sensitivity": sensitivity,
         "source": "Yahoo Finance (^NSMIDCP)",
         "context": "Midcap is a 5–10yr game. Never check it daily. SIP every month, rebalance once a year.",
     }
@@ -726,8 +869,18 @@ def sig_ppf_nps_elss():
         "Tax status (PPF)":     "EEE — invest exempt, interest exempt, maturity exempt",
         "FD equivalent yield":  f"PPF {PPF_RATE}% = FD {PPF_RATE/(1-0.30):.2f}% pre-tax (30% slab)",
     }
+    ppf_equiv_fd = round(PPF_RATE / (1 - 0.30), 2)
+    ppf_real = PPF_RATE - _rate("cpi_inflation")[0]
+    kt = (f"PPF at {PPF_RATE}% is fully tax-free (EEE) — equivalent to a pre-tax FD of {ppf_equiv_fd}% for a 30% tax-bracket investor. "
+          f"Maximise your ₹1.5L PPF contribution before March 31 every year; it is the single most tax-efficient guaranteed instrument in India.")
+    sensitivity = [
+        {"scenario": "If PPF rate cut 0.1% to 7.0%",   "impact": f"Still equivalent to a {round(7.0/0.7,2)}% pre-tax FD — remains superior to any bank FD",          "direction": "neutral"},
+        {"scenario": "If inflation drops to 4%",        "impact": f"PPF real return improves to {PPF_RATE-4:.1f}% — even more attractive; increase contributions",       "direction": "positive"},
+        {"scenario": "If 80C limit raised to ₹2.0L",   "impact": "PPF capacity expands ₹50K — file intent with bank before April 1 to claim increased deduction",      "direction": "positive"},
+    ]
     return {
         "signal": s, "cls": c, "reasons": reasons, "metrics": metrics,
+        "key_takeaway": kt, "sensitivity": sensitivity,
         "source": "Finmin (PPF) · PFRDA (NPS) · SEBI (ELSS)",
         "context": (
             "For a 10yr horizon: max PPF every year > NPS 80CCD(1B) > ELSS SIP. "
@@ -1272,8 +1425,47 @@ def render_signal_detail(asset_name, sig):
             f'</div>'
         )
 
+    # ── Key Takeaway banner (Feature 1) ────────────────────────
+    kt = sig.get("key_takeaway", "")
+    kt_cls   = {"buy":"kt-buy","hold":"kt-hold","wait":"kt-wait"}.get(sig["cls"],"kt-hold")
+    kt_icon  = {"buy":"&#9654;","hold":"&#8212;","wait":"&#9650;"}.get(sig["cls"],"&#8212;")
+    kt_html  = ""
+    if kt:
+        kt_html = (
+            f'<div class="key-takeaway {kt_cls}">'
+            f'  <div class="kt-header"><span class="kt-icon">{kt_icon}</span><span class="kt-label">KEY TAKEAWAY</span>'
+            f'  <span class="kt-badge signal-badge {badge_cls}">{sig["signal"]}</span></div>'
+            f'  <div class="kt-body">{kt}</div>'
+            f'</div>'
+        )
+
+    # ── Sensitivity / What-If table (Feature 3) ─────────────────
+    sensitivity = sig.get("sensitivity", [])
+    sens_html = ""
+    if sensitivity:
+        rows = ""
+        for sc in sensitivity:
+            dir_cls  = {"positive":"sens-pos","negative":"sens-neg","neutral":"sens-neu"}.get(sc.get("direction","neutral"),"sens-neu")
+            dir_icon = {"positive":"&#9650;","negative":"&#9660;","neutral":"&#8212;"}.get(sc.get("direction","neutral"),"&#8212;")
+            rows += (
+                f'<tr>'
+                f'<td class="sens-td sens-scenario">{sc["scenario"]}</td>'
+                f'<td class="sens-td sens-impact">{sc["impact"]}</td>'
+                f'<td class="sens-td sens-dir {dir_cls}">{dir_icon}</td>'
+                f'</tr>'
+            )
+        sens_html = (
+            f'<div class="sens-panel">'
+            f'<div class="sens-label">&#128202; Sensitivity Analysis — What If?</div>'
+            f'<table class="sens-table"><thead><tr>'
+            f'<th class="sens-th">Scenario</th><th class="sens-th">Impact on this asset</th><th class="sens-th">Direction</th>'
+            f'</tr></thead><tbody>{rows}</tbody></table>'
+            f'</div>'
+        )
+
     return (
         f'<div class="signal-detail-panel" id="detail-{asset_name.lower().replace(" ","_").replace("/","_")}">'
+        f'{kt_html}'
         f'<div class="detail-header">'
         f'<div class="detail-title">{asset_name}</div>'
         f'<span class="signal-badge {badge_cls} detail-signal-large">{sig["signal"]}</span>'
@@ -1284,6 +1476,7 @@ def render_signal_detail(asset_name, sig):
         f'<div class="reasons-label">Signal Rationale</div>'
         f'{reasons_html}'
         f'</div>'
+        f'{sens_html}'
         f'{context_html}'
         f'<div class="disclaimer">Data source: {sig.get("source","")} · Educational only — not investment advice. Past performance is not indicative of future results.</div>'
         f'</div>'
@@ -1637,6 +1830,34 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
    kpi-row small, padding reduction, iOS input zoom, hero font
 ═══════════════════════════════════════════════ */
 
+
+/* ─ Key Takeaway banner (Feature 1 — "So What?" Filter) ─ */
+.key-takeaway{margin-bottom:1.1rem;border-radius:6px;padding:12px 15px;border:1.5px solid}
+.key-takeaway.kt-buy{background:#ecfdf5;border-color:rgba(5,150,105,.3)}
+.key-takeaway.kt-hold{background:#fffbeb;border-color:rgba(217,119,6,.3)}
+.key-takeaway.kt-wait{background:#fef2f2;border-color:rgba(220,38,38,.3)}
+.kt-header{display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.kt-icon{font-size:10px}
+.kt-label{font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--label);flex:1}
+.kt-badge{font-size:9px!important;padding:2px 8px!important}
+.kt-body{font-size:13px;line-height:1.65;color:var(--navy);font-weight:500}
+/* ─ Sensitivity table (Feature 3 — Predictive Analysis) ─ */
+.sens-panel{margin-top:.9rem;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.sens-label{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--navy2);padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--border)}
+.sens-table{width:100%;border-collapse:collapse;font-size:12px}
+.sens-th{background:var(--bg);padding:7px 12px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--label);border-bottom:1px solid var(--border);text-align:left}
+.sens-td{padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text2);line-height:1.5}
+.sens-td:last-child{border-bottom:none}
+.sens-scenario{font-weight:600;color:var(--navy);min-width:160px}
+.sens-impact{color:var(--navy3)}
+.sens-dir{text-align:center;font-weight:700;font-size:13px;width:40px}
+.sens-pos{color:var(--green)}.sens-neg{color:var(--red)}.sens-neu{color:var(--muted)}
+/* ─ Data Quality / Staleness badge (Feature 2) ─ */
+.data-quality-badge{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:700;font-family:var(--mono);padding:2px 7px;border-radius:2px;letter-spacing:.05em}
+.dq-live{background:rgba(5,150,105,.1);color:var(--green);border:1px solid rgba(5,150,105,.3)}
+.dq-cached{background:rgba(217,119,6,.1);color:var(--amber);border:1px solid rgba(217,119,6,.3)}
+.dq-stale{background:rgba(220,38,38,.1);color:var(--red);border:1px solid rgba(220,38,38,.3)}
+.stale-warning{margin:.5rem 0;padding:7px 11px;background:rgba(220,38,38,.07);border-left:3px solid var(--red);border-radius:0 4px 4px 0;font-size:11px;color:var(--red);font-family:var(--mono)}
 /* Tablet (≤768px) */
 @media(max-width:768px){
   /* Section header: title + meta stack vertically */
@@ -1729,6 +1950,8 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
   <div class="strip-left">__MARKET_STATUS__
     <span class="strip-sep">·</span>
     <span>RBI Repo: <strong style="color:var(--amber)">__REPO_RATE__%</strong></span>
+    <span class="data-quality-badge __DATA_QUALITY_CLS__">__DATA_QUALITY_LABEL__</span>
+    __STALE_WARNINGS__
     <span class="strip-sep">·</span>
     <span>Data: CoinGecko &middot; NSE &middot; NYSE &middot; yFinance</span>
   </div>
@@ -3926,6 +4149,22 @@ def build_html(crypto_data, stocks_data, signals, ticker_html, updated_at, marke
     html = html.replace("__SIDEBAR_ITEMS__",        sidebar_html)
     html = html.replace("__SIGNAL_DETAILS__",       details_html)
     html = html.replace("__PORTFOLIO_BUILDER__",    portfolio_builder_html)
+    # ── Data quality badges (Feature 2) ──────────────────────────
+    dq_live  = _RATES.get("repo_live", False)
+    dq_stale = _RATES.get("repo_rate_stale", False)
+    if dq_live:
+        dq_cls, dq_lbl = "dq-live",   "● LIVE RATES"
+    elif dq_stale:
+        dq_cls, dq_lbl = "dq-stale",  "⚠ RATES STALE"
+    else:
+        dq_cls, dq_lbl = "dq-cached", "● CACHED RATES"
+    stale_warnings_html = ""
+    for err in _RATES.get("_errors", []):
+        if "STALE" in err:
+            stale_warnings_html += f'<div class="stale-warning">⚠ {err}</div>'
+    html = html.replace("__DATA_QUALITY_CLS__",   dq_cls)
+    html = html.replace("__DATA_QUALITY_LABEL__", dq_lbl)
+    html = html.replace("__STALE_WARNINGS__",     stale_warnings_html)
     # ── Inject Firebase frontend config from environment variables ──
     html = html.replace("__FIREBASE_API_KEY__",            os.environ.get("FIREBASE_API_KEY", ""))
     html = html.replace("__FIREBASE_AUTH_DOMAIN__",        os.environ.get("FIREBASE_AUTH_DOMAIN", ""))
@@ -3963,6 +4202,18 @@ def main():
         print(f"  ⚠ Live crypto fetch failed: {e}")
         crypto_data, _ = load_lkg()
 
+    global REPO_RATE, PREV_REPO, HOME_LOAN, _RATES
+    print("🔄 Fetching dynamic macro rates (repo, PPF, inflation)...")
+    _RATES = fetch_dynamic_rates()
+    REPO_RATE = _RATES.get("repo_rate", REPO_RATE)
+    PREV_REPO = _RATES.get("prev_repo", PREV_REPO)
+    HOME_LOAN = _RATES.get("home_loan", HOME_LOAN)
+    if _RATES.get("repo_live"):
+        print(f"  ✅ LIVE repo rate: {REPO_RATE}%")
+    else:
+        stale = _RATES.get("repo_rate_stale", False)
+        days  = _RATES.get("repo_rate_days_old", 0)
+        print(f"  {'⚠ STALE' if stale else '📦 Cached'} repo rate: {REPO_RATE}% ({days} days old)")
     print("📈 Fetching stock data (Nifty, S&P 500, NASDAQ, Midcap 150, ETFs)...")
     try:
         stocks_data = fetch_stocks()
