@@ -1301,7 +1301,8 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 <title>FinVault Pro — Financial Intelligence Platform</title>
 <meta name="description" content="Professional financial calculators and live market signals. SIP, FIRE, EMI, tax, and BUY/HOLD/WAIT signals for gold, crypto, stocks, property.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@300;400;500;600;700;800;900&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Fira+Code:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <!-- ── Firebase Google Auth ─────────────────────────────── -->
 <script type="module">
@@ -1352,7 +1353,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   --amber:#d97706; --amber-dim:rgba(217,119,6,0.1);
   --text:#0c4a6e; --text2:#0369a1; --muted:#64748b; --dim:#94a3b8; --label:#475569;
   --navy:#0c4a6e; --navy2:#0369a1; --navy3:#334155;
-  --mono:'IBM Plex Mono',monospace; --sans:'Epilogue',sans-serif;
+  --mono:'Fira Code',monospace; --sans:'Outfit',sans-serif;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
