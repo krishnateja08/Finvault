@@ -945,6 +945,73 @@ _LT_BUILDER_TEMPLATE = """
 .lt-rule-marker.green{background:var(--green-dim);color:var(--green)}
 .lt-rule-marker.amber{background:var(--amber-dim);color:var(--amber)}
 .lt-rule-marker.red{background:var(--red-dim);color:var(--red)}
+
+<style id="planner-styles">
+#planner{
+  --pfp-navy:#0f2138; --pfp-navy2:#16304f; --pfp-navy3:#1f4068;
+  --pfp-gold:#c9a24b; --pfp-teal:#1f9d8b; --pfp-red:#c0453a;
+  --pfp-bg:#eef1f6; --pfp-card:#ffffff; --pfp-line:#dde3ec;
+  --pfp-text:#1c2733; --pfp-muted:#647287;
+  --pfp-mono:'Fira Code',monospace; --pfp-sans:'Outfit',sans-serif;
+}
+#planner .pfp-grid{display:grid;gap:14px;}
+#planner .pfp-grid.pfp-cols-4{grid-template-columns:repeat(4,1fr);}
+#planner .pfp-grid.pfp-cols-3{grid-template-columns:repeat(3,1fr);}
+#planner .pfp-grid.pfp-cols-2{grid-template-columns:repeat(2,1fr);}
+@media(max-width:1100px){
+  #planner .pfp-grid.pfp-cols-4{grid-template-columns:repeat(2,1fr);}
+  #planner .pfp-grid.pfp-cols-3{grid-template-columns:repeat(2,1fr);}
+}
+@media(max-width:640px){
+  #planner .pfp-grid.pfp-cols-4,#planner .pfp-grid.pfp-cols-3,#planner .pfp-grid.pfp-cols-2{grid-template-columns:1fr;}
+}
+#planner .pfp-card{background:var(--pfp-card);border:1px solid var(--pfp-line);border-radius:12px;padding:18px 20px;box-shadow:0 1px 3px rgba(15,33,56,.06);}
+#planner .pfp-card h3{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--pfp-navy3);margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid var(--pfp-bg);}
+#planner .pfp-card h3 span.pfp-section-tag{float:right;font-size:10px;color:var(--pfp-gold);background:var(--pfp-navy);padding:2px 8px;border-radius:10px;letter-spacing:.5px;}
+#planner .pfp-field{margin-bottom:12px;}
+#planner .pfp-field:last-child{margin-bottom:0;}
+#planner .pfp-field label{display:block;font-size:11.5px;font-weight:700;color:var(--pfp-muted);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;}
+#planner .pfp-field .pfp-hint{font-size:10.5px;color:#93a1b3;font-weight:400;text-transform:none;letter-spacing:0;}
+#planner .pfp-field .pfp-hint#pl_f_incomeAnnualNote,#planner .pfp-field .pfp-hint#pl_f_expenseAnnualNote{display:block;margin-top:5px;font-family:var(--pfp-mono);font-weight:700;color:var(--pfp-teal);letter-spacing:.2px;}
+#planner .pfp-input-wrap{position:relative;}
+#planner .pfp-input-wrap .pfp-prefix{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--pfp-muted);font-size:13px;font-family:var(--pfp-mono);}
+#planner .pfp-input-wrap .pfp-suffix{position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--pfp-muted);font-size:12px;font-family:var(--pfp-mono);}
+#planner input[type=text],#planner input[type=number]{width:100%;padding:9px 10px;border:1.5px solid var(--pfp-line);border-radius:7px;font-size:14px;font-family:var(--pfp-mono);background:#fbfcfe;color:var(--pfp-text);transition:.15s;}
+#planner input.pfp-has-prefix{padding-left:26px;}
+#planner input.pfp-has-suffix{padding-right:30px;}
+#planner input:focus{outline:none;border-color:var(--pfp-teal);background:#fff;box-shadow:0 0 0 3px rgba(31,157,139,.12);}
+#planner .pfp-results-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:16px 0;}
+#planner .pfp-stat{background:var(--pfp-navy);color:#fff;border-radius:12px;padding:16px 18px;}
+#planner .pfp-stat .label{font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:#9fb0c6;margin-bottom:6px;}
+#planner .pfp-stat .value{font-size:20px;font-weight:700;font-family:var(--pfp-mono);color:#fff;}
+#planner .pfp-stat.pfp-accent{background:linear-gradient(135deg,var(--pfp-teal),#127566);}
+#planner .pfp-stat.pfp-gold{background:linear-gradient(135deg,#8a6d1f,var(--pfp-gold));}
+#planner .pfp-banner{border-radius:10px;padding:14px 18px;font-weight:700;font-size:14px;margin:14px 0;}
+#planner .pfp-banner.pfp-good{background:#e4f6ef;color:#116b52;border:1.5px solid #9fe0c6;}
+#planner .pfp-banner.pfp-bad{background:#fdecea;color:#9a2f24;border:1.5px solid #f3b7ae;}
+#planner table{width:100%;border-collapse:collapse;font-size:12.5px;font-family:var(--pfp-mono);}
+#planner thead th{position:sticky;top:0;background:var(--pfp-navy2);color:#fff;padding:9px 8px;text-align:right;font-family:var(--pfp-sans);font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;}
+#planner thead th:first-child,#planner tbody td:first-child{text-align:center;}
+#planner tbody td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--pfp-line);white-space:nowrap;}
+#planner tbody tr:nth-child(even){background:#f7f9fc;}
+#planner tbody tr.pfp-na td{color:#b7c0cd;}
+#planner .pfp-table-scroll{max-height:420px;overflow:auto;border:1px solid var(--pfp-line);border-radius:10px;margin-top:10px;}
+#planner .pfp-section-title{margin:26px 0 10px;padding-bottom:8px;border-bottom:2px solid var(--pfp-navy);}
+#planner .pfp-section-title h2{font-size:16px;color:var(--pfp-navy);text-transform:uppercase;letter-spacing:.6px;}
+#planner .pfp-section-title p{margin:2px 0 0;color:var(--pfp-muted);font-size:12.5px;}
+#planner .pfp-flow-header{background:var(--pfp-navy3);color:#fff;padding:7px 12px;border-radius:7px 7px 0 0;font-size:11px;text-transform:uppercase;letter-spacing:.6px;font-weight:700;}
+#planner .pfp-flow-body{border:1px solid var(--pfp-line);border-top:none;border-radius:0 0 7px 7px;padding:12px;background:#fff;}
+#planner .pfp-assess-table td,#planner .pfp-assess-table th{text-align:left;}
+#planner .pfp-assess-table td:nth-child(2),#planner .pfp-assess-table td:nth-child(3){text-align:right;}
+#planner .pfp-assess-badge{padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;}
+#planner .pfp-assess-badge.pfp-ok{background:#e4f6ef;color:#116b52;}
+#planner .pfp-assess-badge.pfp-warn{background:#fdf3e3;color:#8a5a12;}
+#planner .pfp-footnote{font-size:11px;color:var(--pfp-muted);margin-top:8px;line-height:1.5;}
+#planner .pfp-legend-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;}
+#planner .calc-inner.active{display:block !important;padding:1.25rem 1.5rem;}
+#planner .calc-inner{background:var(--surface);}
+
+</style>
 </style>
 
 <script>
@@ -1743,6 +1810,7 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
     <li><button onclick="showSection('invest')">Invest</button></li>
     <li><button onclick="showSection('longterm')">Long-Term</button></li>
     <li><button onclick="showSection('retire')">Retire</button></li>
+    <li><button onclick="showSection('planner')">Planner</button></li>
     <li><button onclick="showSection('stocks')">Risk Lab</button></li>
     <li><button onclick="showSection('loans')">Loans</button></li>
     <li><button onclick="showSection('tax')">Tax</button></li>
@@ -2326,6 +2394,30 @@ footer{border-top:1px solid var(--border);padding:.9rem 1.5rem;display:flex;alig
         <div id="withdrawResult"></div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ═══ PLANNER — Detailed FIRE & Monthly Budget Suite ═══ -->
+<div id="planner" class="section">
+  <div class="section-header">
+    <div>
+      <div class="section-title">Tools &mdash; Planner</div>
+      <div class="section-subtitle">Detailed FIRE &amp; Monthly Budget Planner</div>
+    </div>
+  </div>
+  <div class="calc-section">
+    <div class="calc-tabs-bar">
+      <button class="calc-tab active" onclick="switchTab(this,'planner','fire')">FIRE Calculator</button>
+      <button class="calc-tab" onclick="switchTab(this,'planner','budget')">Monthly Budget</button>
+      <button class="calc-tab" onclick="switchTab(this,'planner','retire')">Retirement Need</button>
+      <button class="calc-tab" onclick="switchTab(this,'planner','child')">Child Goal</button>
+      <button class="calc-tab" onclick="switchTab(this,'planner','sip')">Step-Up SIP</button>
+    </div>
+    <div id="planner-fire" class="calc-inner active"><div id="pl-fire-root"></div></div>
+    <div id="planner-budget" class="calc-inner"><div id="pl-budget-root"></div></div>
+    <div id="planner-retire" class="calc-inner"><div id="pl-retire-root"></div></div>
+    <div id="planner-child" class="calc-inner"><div id="pl-child-root"></div></div>
+    <div id="planner-sip" class="calc-inner"><div id="pl-sip-root"></div></div>
   </div>
 </div>
 
@@ -3365,6 +3457,621 @@ document.addEventListener('DOMContentLoaded',()=>{
   const first=document.querySelector('.js-sig-item');
   if(first){first.classList.add('active');const key=first.dataset.asset;const det=document.getElementById('det-'+key);if(det)det.classList.add('active');}
 });
+</script>
+<script>
+// ════════ PLANNER: FIRE + BUDGET SUITE (namespaced, self-contained) ════════
+(function(){
+function FV(rate, nper, pmt, pv, type){
+  pmt = pmt||0; pv = pv||0; type = type||0;
+  if(!isFinite(rate) || !isFinite(nper)) return NaN;
+  if(nper===0) return -pv;
+  if(rate===0) return -(pv + pmt*nper);
+  const pow = Math.pow(1+rate, nper);
+  return -(pv*pow + pmt*(1+rate*type)*(pow-1)/rate);
+}
+function PV(rate, nper, pmt, fv, type){
+  pmt = pmt||0; fv = fv||0; type = type||0;
+  if(!isFinite(rate) || !isFinite(nper)) return NaN;
+  if(rate===0) return -(fv + pmt*nper);
+  const pow = Math.pow(1+rate, nper);
+  return -(fv + pmt*(1+rate*type)*(pow-1)/rate) / pow;
+}
+function PMT(rate, nper, pv, fv, type){
+  pv = pv||0; fv = fv||0; type = type||0;
+  if(!isFinite(rate) || !isFinite(nper) || nper===0) return NaN;
+  if(rate===0) return -(pv+fv)/nper;
+  const pow = Math.pow(1+rate, nper);
+  return -(pv*pow + fv) * rate / ((1+rate*type)*(pow-1));
+}
+function NOMINAL(effRate, npery){
+  if(effRate <= -1) return NaN;
+  return npery * (Math.pow(1+effRate, 1/npery) - 1);
+}
+
+/* ============================================================
+   FORMATTERS
+   ============================================================ */
+const inrFmt = new Intl.NumberFormat('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+function inr(v){
+  if(v===null || v===undefined || isNaN(v) || !isFinite(v)) return '—';
+  const s = inrFmt.format(Math.abs(v));
+  return (v<0? '-₹':'₹') + s;
+}
+function pctStr(v, dp){
+  if(v===null||v===undefined||isNaN(v)||!isFinite(v)) return '—';
+  return (v*100).toFixed(dp===undefined?2:dp) + '%';
+}
+function isNA(v){ return v === 'NA' || v === 'N A'; }
+function num(id){ const el=document.getElementById(id); const v=parseFloat(el.value); return isNaN(v)?0:v; }
+function pctVal(id){ return num(id)/100; }
+function txt(id){ return document.getElementById(id).value; }
+(function(){
+  const root = document.getElementById('pl-fire-root');
+
+  root.innerHTML = `
+    <div class="pfp-grid pfp-cols-4">
+      <div class="pfp-card">
+        <h3>Personal Details</h3>
+        <div class="pfp-field"><label>Name</label><input type="text" id="pl_f_name" value="Your Name"></div>
+        <div class="pfp-field"><label>Current Age</label><input type="number" id="pl_f_age" value="30"></div>
+        <div class="pfp-field"><label>FIRE @ Age</label><input type="number" id="pl_f_fireAge" value="50"></div>
+      </div>
+      <div class="pfp-card">
+        <h3>Income &amp; Expense</h3>
+        <div class="pfp-field"><label>Current Monthly Income</label>
+          <div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_f_incomeMonthly" value="125000"></div>
+          <div class="pfp-hint" id="pl_f_incomeAnnualNote">Annual: ₹0</div></div>
+        <div class="pfp-field"><label>Current Monthly Expense</label>
+          <div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_f_expenseMonthly" value="58333"></div>
+          <div class="pfp-hint" id="pl_f_expenseAnnualNote">Annual: ₹0</div></div>
+        <div class="pfp-field"><label>Current Investment</label>
+          <div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_f_investment" value="2000000"></div></div>
+      </div>
+      <div class="pfp-card">
+        <h3>Growth Rates</h3>
+        <div class="pfp-field"><label>Expected Growth in Salary</label>
+          <div class="pfp-input-wrap"><input class="pfp-has-suffix" type="number" step="0.1" id="pl_f_salaryGrowth" value="8"><span class="pfp-suffix">%</span></div></div>
+        <div class="pfp-field"><label>Inflation</label>
+          <div class="pfp-input-wrap"><input class="pfp-has-suffix" type="number" step="0.1" id="pl_f_inflation" value="6"><span class="pfp-suffix">%</span></div></div>
+        <div class="pfp-field"><label>Expected Return <span class="pfp-hint">(accumulation phase)</span></label>
+          <div class="pfp-input-wrap"><input class="pfp-has-suffix" type="number" step="0.1" id="pl_f_returnAccum" value="12"><span class="pfp-suffix">%</span></div></div>
+      </div>
+      <div class="pfp-card">
+        <h3>Post-Retirement Returns</h3>
+        <div class="pfp-field"><label>Expected Return <span class="pfp-hint">(4% withdrawal model)</span></label>
+          <div class="pfp-input-wrap"><input class="pfp-has-suffix" type="number" step="0.1" id="pl_f_returnPost1" value="8"><span class="pfp-suffix">%</span></div></div>
+        <div class="pfp-field"><label>Expected Return <span class="pfp-hint">(fixed real-expense model)</span></label>
+          <div class="pfp-input-wrap"><input class="pfp-has-suffix" type="number" step="0.1" id="pl_f_returnPost2" value="8"><span class="pfp-suffix">%</span></div></div>
+        <div class="pfp-field"><label>Real Rate <span class="pfp-hint">(computed)</span></label>
+          <div class="pfp-input-wrap"><input class="pfp-has-suffix" type="text" id="pl_f_realRate" value="" readonly disabled><span class="pfp-suffix">%</span></div></div>
+      </div>
+    </div>
+
+    <div class="pfp-results-row" id="pl_f_stats"></div>
+    <div id="pl_f_banner"></div>
+
+    <div class="pfp-section-title"><h2>Table 1 — Accumulation Phase</h2><p>Corresponds to columns E:J, rows 12–47. Grows income and expense annually until FIRE age is reached.</p></div>
+    <div class="pfp-table-scroll"><table id="pl_f_table1"></table></div>
+
+    <div class="pfp-section-title"><h2>Table 2 — Post-Retirement Projection (4% Withdrawal Rule)</h2><p>Corresponds to columns M:Q, rows 12–81. Withdraws 4% of the remaining corpus each year.</p></div>
+    <div class="pfp-table-scroll"><table id="pl_f_table2"></table></div>
+
+    <div class="pfp-section-title"><h2>Table 3 — Post-Retirement Projection (Fixed Real Expense)</h2><p>Corresponds to columns T:X, rows 12–81. Withdraws the inflation-adjusted annual expense each year.</p></div>
+    <div class="pfp-table-scroll"><table id="pl_f_table3"></table></div>
+    <p class="pfp-footnote">This calculator reproduces every formula from FIRE.xlsx, including FV/NOMINAL-based monthly-compounding growth, the MAX() corpus lookup, and the original workbook's own "N A" gating logic on each projection row.</p>
+  `;
+
+  function calc(){
+    const currentAge = num('pl_f_age');
+    const fireAge = num('pl_f_fireAge');
+    const incomeMonthly = num('pl_f_incomeMonthly');
+    const expenseMonthly = num('pl_f_expenseMonthly');
+    const income0 = incomeMonthly*12;
+    const expense0 = expenseMonthly*12;
+    document.getElementById('pl_f_incomeAnnualNote').textContent = 'Annual: ' + inr(income0);
+    document.getElementById('pl_f_expenseAnnualNote').textContent = 'Annual: ' + inr(expense0);
+    const investment0 = num('pl_f_investment');
+    const salaryGrowth = pctVal('pl_f_salaryGrowth');
+    const inflation = pctVal('pl_f_inflation');
+    const returnAccum = pctVal('pl_f_returnAccum');
+    const returnPost1 = pctVal('pl_f_returnPost1');
+    const returnPost2 = pctVal('pl_f_returnPost2');
+
+    // X10 real rate (display only, matches C: ((1+W10)/(1+V10))-1 where V10=inflation)
+    const realRate = ((1+returnPost2)/(1+inflation)) - 1;
+    document.getElementById('pl_f_realRate').value = (realRate*100).toFixed(2);
+
+    /* ---- Table 1: Accumulation (rows 12-47, 36 rows) ---- */
+    const N1 = 36;
+    const E=[],F=[],G=[],H=[],I=[],J=[];
+    E[0]=currentAge; F[0]=investment0; G[0]=income0; H[0]=expense0; I[0]=G[0]-H[0];
+    J[0]=FV(NOMINAL(returnAccum,12)/12, 12, -I[0]/12, -F[0], 1);
+    for(let i=1;i<N1;i++){
+      E[i] = E[i-1] < fireAge ? E[i-1]+1 : 'NA';
+      if(isNA(E[i])){ F[i]=0; G[i]=0; H[i]=0; I[i]=0; J[i]=0; }
+      else{
+        F[i]=J[i-1];
+        G[i]=G[i-1]*(1+salaryGrowth);
+        H[i]=H[i-1]*(1+inflation);
+        I[i]=G[i]-H[i];
+        J[i]=FV(NOMINAL(returnAccum,12)/12, 12, -I[i]/12, -F[i], 1);
+      }
+    }
+    const yearsToRetire = E.filter(v=>typeof v==='number').length; // =COUNT(E12:E48)
+    const maxJ = Math.max(...J);
+
+    const annualExpenseAtRetirement = FV(inflation, yearsToRetire, 0, -expense0, 1); // C13
+    const fireNumber25 = annualExpenseAtRetirement*25; // C14
+    const fireNumber30 = annualExpenseAtRetirement*30; // C15
+    const achieved = maxJ >= fireNumber25;
+
+    /* ---- Table 2: Post-retirement, 4% rule (rows 12-81, 70 rows) ---- */
+    const N2 = 70;
+    const M=[],Np=[],O=[],P=[],Q=[];
+    M[0]=fireAge+1; Np[0]=maxJ; O[0]=Np[0]*0.04; P[0]=(Np[0]-O[0])*returnPost1; Q[0]=Np[0]-O[0]+P[0];
+    for(let i=1;i<N2;i++){
+      M[i] = M[i-1] < 100 ? M[i-1]+1 : 'NA';
+      Np[i] = isNA(M[i]) ? 0 : Q[i-1];
+      O[i] = Np[i]*0.04;
+      P[i] = isNA(M[i]) ? 0 : (Np[i]-O[i])*returnPost1;
+      Q[i] = isNA(M[i]) ? 0 : Np[i]-O[i]+P[i];
+    }
+
+    /* ---- Table 3: Post-retirement, fixed real expense (rows 12-81, 70 rows) ---- */
+    const N3 = 70;
+    const T=[],U=[],V=[],W=[],X=[];
+    T[0]=fireAge+1; U[0]=maxJ; V[0]=annualExpenseAtRetirement; W[0]=(U[0]-V[0])*returnPost2; X[0]=U[0]-V[0]+W[0];
+    for(let i=1;i<N3;i++){
+      T[i] = T[i-1] < 100 ? T[i-1]+1 : 'NA';
+      U[i] = isNA(T[i]) ? 0 : X[i-1];
+      V[i] = V[i-1]*(1+inflation);
+      W[i] = isNA(T[i]) ? 0 : (U[i]-V[i])*returnPost2;
+      X[i] = isNA(T[i]) ? 0 : U[i]-V[i]+W[i];
+    }
+
+    /* ---- Stats ---- */
+    document.getElementById('pl_f_stats').innerHTML = `
+      <div class="pfp-stat"><div class="label">Annual Expense</div><div class="value">${inr(expense0)}</div></div>
+      <div class="pfp-stat"><div class="label">Years to Retire</div><div class="value">${yearsToRetire}</div></div>
+      <div class="pfp-stat pfp-accent"><div class="label">Annual Expense @ Retirement</div><div class="value">${inr(annualExpenseAtRetirement)}</div></div>
+      <div class="pfp-stat pfp-gold"><div class="label">FIRE Number (25×)</div><div class="value">${inr(fireNumber25)}</div></div>
+      <div class="pfp-stat pfp-gold"><div class="label">FIRE Number (30×)</div><div class="value">${inr(fireNumber30)}</div></div>
+      <div class="pfp-stat"><div class="label">Peak Projected Corpus</div><div class="value">${inr(maxJ)}</div></div>
+    `;
+    document.getElementById('pl_f_banner').innerHTML = `<div class="pfp-banner ${achieved?'good':'bad'}">
+      ${achieved ? '✓ FIRE NUMBER IS ACHIEVED' : '✕ FIRE NUMBER NOT ACHIEVED — CHANGE THE FIRE AGE OR INCREASE INVESTMENT'}
+    </div>`;
+
+    /* ---- Render tables ---- */
+    let h1 = '<thead><tr><th>Age</th><th>Current Investment</th><th>Annual Income</th><th>Annual Expense</th><th>Annual Investment</th><th>End Value</th></tr></thead><tbody>';
+    for(let i=0;i<N1;i++){
+      const na = isNA(E[i]);
+      h1 += `<tr class="${na?'pfp-na':''}"><td>${na?'—':E[i]}</td><td>${na?'—':inr(F[i])}</td><td>${na?'—':inr(G[i])}</td><td>${na?'—':inr(H[i])}</td><td>${na?'—':inr(I[i])}</td><td>${na?'—':inr(J[i])}</td></tr>`;
+    }
+    h1 += '</tbody>';
+    document.getElementById('pl_f_table1').innerHTML = h1;
+
+    let h2 = '<thead><tr><th>Age</th><th>Initial Corpus</th><th>Annual Expense (4%)</th><th>Return on Investment</th><th>End Value</th></tr></thead><tbody>';
+    for(let i=0;i<N2;i++){
+      const na = isNA(M[i]);
+      h2 += `<tr class="${na?'pfp-na':''}"><td>${na?'—':M[i]}</td><td>${na?'—':inr(Np[i])}</td><td>${na?'—':inr(O[i])}</td><td>${na?'—':inr(P[i])}</td><td>${na?'—':inr(Q[i])}</td></tr>`;
+    }
+    h2 += '</tbody>';
+    document.getElementById('pl_f_table2').innerHTML = h2;
+
+    let h3 = '<thead><tr><th>Age</th><th>Initial Corpus</th><th>Annual Expense</th><th>Return on Investment</th><th>End Value</th></tr></thead><tbody>';
+    for(let i=0;i<N3;i++){
+      const na = isNA(T[i]);
+      h3 += `<tr class="${na?'pfp-na':''}"><td>${na?'—':T[i]}</td><td>${na?'—':inr(U[i])}</td><td>${na?'—':inr(V[i])}</td><td>${na?'—':inr(W[i])}</td><td>${na?'—':inr(X[i])}</td></tr>`;
+    }
+    h3 += '</tbody>';
+    document.getElementById('pl_f_table3').innerHTML = h3;
+  }
+
+  root.addEventListener('input', calc);
+  calc();
+})();
+
+(function(){
+  const root = document.getElementById('pl-retire-root');
+
+  root.innerHTML = `
+    <div class="pfp-grid pfp-cols-3">
+      <div class="pfp-card">
+        <h3>Age &amp; Life Expectancy</h3>
+        <div class="pfp-field"><label>Present Age</label><input type="number" id="pl_r_age" value="30"></div>
+        <div class="pfp-field"><label>Expected Retirement Age</label><input type="number" id="pl_r_retireAge" value="55"></div>
+        <div class="pfp-field"><label>Total Life Expectancy</label><input type="number" id="pl_r_lifeExp" value="85"></div>
+      </div>
+      <div class="pfp-card">
+        <h3>Pre-Retirement</h3>
+        <div class="pfp-field"><label>Present Expenses <span class="pfp-hint">(monthly)</span></label>
+          <div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_r_expenses" value="50000"></div></div>
+        <div class="pfp-field"><label>Expected Pre-Retirement Inflation</label>
+          <div class="pfp-input-wrap"><input class="pfp-has-suffix" type="number" step="0.1" id="pl_r_preInflation" value="6"><span class="pfp-suffix">%</span></div></div>
+      </div>
+      <div class="pfp-card">
+        <h3>Post-Retirement</h3>
+        <div class="pfp-field"><label>Post-Retirement Expected Return</label>
+          <div class="pfp-input-wrap"><input class="pfp-has-suffix" type="number" step="0.1" id="pl_r_postReturn" value="8"><span class="pfp-suffix">%</span></div></div>
+        <div class="pfp-field"><label>Post-Retirement Expected Inflation</label>
+          <div class="pfp-input-wrap"><input class="pfp-has-suffix" type="number" step="0.1" id="pl_r_postInflation" value="6"><span class="pfp-suffix">%</span></div></div>
+      </div>
+    </div>
+
+    <div class="pfp-results-row" id="pl_r_stats"></div>
+
+    <div class="pfp-section-title"><h2>Post-Retirement Cash Outflows</h2><p>Corresponds to columns O:T, rows 8–62. Corpus is drawn down by the (inflation-growing) annual expense each year and grows by the post-retirement return.</p></div>
+    <div class="pfp-table-scroll"><table id="pl_r_table"></table></div>
+    <p class="pfp-footnote">Formulas reproduced: No. of Years to Retirement = Retirement Age − Present Age · Expenses at Retirement = FV(Pre-Retirement Inflation, Years, 0, −Present Expenses, 0) · Inflation-Adjusted Return = ((1+Post Return)/(1+Post Inflation))−1 · Corpus Required = PV(monthly inflation-adjusted rate, months in retirement, −Monthly Expense at Retirement, 0, 1).</p>
+  `;
+
+  function calc(){
+    const age = num('pl_r_age');
+    const retireAge = num('pl_r_retireAge');
+    const lifeExp = num('pl_r_lifeExp');
+    const presentExpenses = num('pl_r_expenses');
+    const preInflation = pctVal('pl_r_preInflation');
+    const postReturn = pctVal('pl_r_postReturn');
+    const postInflation = pctVal('pl_r_postInflation');
+
+    const yearsToRetire = retireAge - age; // C12
+    const expenseAtRetirement = FV(preInflation, yearsToRetire, 0, -presentExpenses, 0); // C13
+    const monthlyExpenseAtRetirement = expenseAtRetirement; // C15 = C13
+    const monthsRequired = (lifeExp - retireAge) * 12; // C16
+    const inflationAdjReturn = ((1+postReturn)/(1+postInflation)) - 1; // C19
+    const monthlyDiscountRate = NOMINAL(inflationAdjReturn, 12) / 12; // D19
+    const corpusRequired = PV(monthlyDiscountRate, monthsRequired, -monthlyExpenseAtRetirement, 0, 1); // C20
+
+    document.getElementById('pl_r_stats').innerHTML = `
+      <div class="pfp-stat"><div class="label">Years to Retirement</div><div class="value">${yearsToRetire}</div></div>
+      <div class="pfp-stat"><div class="label">Months in Retirement</div><div class="value">${monthsRequired}</div></div>
+      <div class="pfp-stat pfp-accent"><div class="label">Monthly Expense @ Retirement</div><div class="value">${inr(monthlyExpenseAtRetirement)}</div></div>
+      <div class="pfp-stat"><div class="label">Inflation-Adjusted Return</div><div class="value">${pctStr(inflationAdjReturn)}</div></div>
+      <div class="pfp-stat pfp-gold"><div class="label">Corpus Required @ Retirement</div><div class="value">${inr(corpusRequired)}</div></div>
+    `;
+
+    /* Table rows 8-62 => 55 rows */
+    const N = 55;
+    const O=[],P=[],Q=[],R=[],S=[],T=[];
+    O[0]=retireAge+1;
+    P[0]= O[0]<=lifeExp ? corpusRequired : 'NA';
+    Q[0]= O[0]<=lifeExp ? monthlyExpenseAtRetirement*12 : 'NA';
+    R[0]= (isNA(P[0])||isNA(Q[0])) ? 'NA' : P[0]-Q[0];
+    S[0]= isNA(R[0]) ? 'NA' : R[0]*postReturn;
+    T[0]= (isNA(R[0])||isNA(S[0])) ? 'NA' : R[0]+S[0];
+    for(let i=1;i<N;i++){
+      O[i] = O[i-1] < lifeExp ? O[i-1]+1 : 'NA';
+      P[i] = (!isNA(O[i]) && O[i]<=lifeExp) ? T[i-1] : 'NA';
+      Q[i] = (!isNA(O[i]) && O[i]<=lifeExp) ? Q[i-1]*(1+postInflation) : 'NA';
+      R[i] = (!isNA(O[i]) && O[i]<=lifeExp) ? P[i]-Q[i] : 'NA';
+      S[i] = (!isNA(O[i]) && O[i]<=lifeExp) ? R[i]*postReturn : 'NA';
+      T[i] = (!isNA(O[i]) && O[i]<=lifeExp) ? R[i]+S[i] : 'NA';
+    }
+
+    let h = '<thead><tr><th>Age</th><th>Corpus</th><th>Yearly Expense</th><th>Corpus Post Expense</th><th>Return on Corpus</th><th>End Corpus</th></tr></thead><tbody>';
+    for(let i=0;i<N;i++){
+      const na = isNA(O[i]);
+      h += `<tr class="${na?'pfp-na':''}"><td>${na?'—':O[i]}</td><td>${isNA(P[i])?'—':inr(P[i])}</td><td>${isNA(Q[i])?'—':inr(Q[i])}</td><td>${isNA(R[i])?'—':inr(R[i])}</td><td>${isNA(S[i])?'—':inr(S[i])}</td><td>${isNA(T[i])?'—':inr(T[i])}</td></tr>`;
+    }
+    h += '</tbody>';
+    document.getElementById('pl_r_table').innerHTML = h;
+  }
+
+  root.addEventListener('input', calc);
+  calc();
+})();
+
+(function(){
+  const root = document.getElementById('pl-child-root');
+
+  root.innerHTML = `
+    <div class="pfp-grid pfp-cols-3">
+      <div class="pfp-card">
+        <h3>Child &amp; Goal</h3>
+        <div class="pfp-field"><label>Present Child Age</label><input type="number" id="pl_c_age" value="5"></div>
+        <div class="pfp-field"><label>Age of Child @ the Goal</label><input type="number" id="pl_c_goalAge" value="18"></div>
+      </div>
+      <div class="pfp-card">
+        <h3>Cost &amp; Inflation</h3>
+        <div class="pfp-field"><label>Current Cost of Education</label>
+          <div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_c_cost" value="1500000"></div></div>
+        <div class="pfp-field"><label>Expected Inflation</label>
+          <div class="pfp-input-wrap"><input class="pfp-has-suffix" type="number" step="0.1" id="pl_c_inflation" value="8"><span class="pfp-suffix">%</span></div></div>
+        <div class="pfp-field"><label>Expected Return on Investment</label>
+          <div class="pfp-input-wrap"><input class="pfp-has-suffix" type="number" step="0.1" id="pl_c_return" value="12"><span class="pfp-suffix">%</span></div></div>
+      </div>
+      <div class="pfp-card">
+        <h3>Investment Plan</h3>
+        <div class="pfp-field"><label>Planned Monthly Investment</label>
+          <div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_c_monthlyInv" value="10000"></div></div>
+        <div class="pfp-field"><label>Expected Annual Incremental Rate <span class="pfp-hint">(step-up)</span></label>
+          <div class="pfp-input-wrap"><input class="pfp-has-suffix" type="number" step="0.1" id="pl_c_stepUp" value="10"><span class="pfp-suffix">%</span></div></div>
+        <div class="pfp-field"><label>Initial Lump Sum Investment <span class="pfp-hint">(optional)</span></label>
+          <div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_c_lumpsum" value="0"></div></div>
+      </div>
+    </div>
+
+    <div class="pfp-results-row" id="pl_c_stats"></div>
+
+    <div class="pfp-section-title"><h2>Year-by-Year Projection</h2><p>Corresponds to columns J:M. Monthly investment steps up every year by the incremental rate; ending value is computed with FV() at a monthly-compounded rate.</p></div>
+    <div class="pfp-table-scroll"><table id="pl_c_table"></table></div>
+    <p class="pfp-footnote">Formulas reproduced: Corpus Required = FV(Inflation, Goal Age − Present Age, 0, −Current Cost) · Monthly Investment Required = −PMT(NOMINAL(Return,12)/12, Years×12, −Lump Sum, Corpus, 1) · Annual Investment Required = −PMT(Return, Years, −Lump Sum, Corpus, 1) · Lump Sum Required = −PV(Return, Years, 0, Corpus).</p>
+  `;
+
+  function calc(){
+    const age = num('pl_c_age');
+    const goalAge = num('pl_c_goalAge');
+    const cost = num('pl_c_cost');
+    const inflation = pctVal('pl_c_inflation');
+    const ret = pctVal('pl_c_return');
+    const monthlyInv = num('pl_c_monthlyInv');
+    const stepUp = pctVal('pl_c_stepUp');
+    const lumpsum = num('pl_c_lumpsum');
+
+    const years = goalAge - age;
+    const corpusRequired = FV(inflation, years, 0, -cost, 0); // F13
+    const monthlyInvRequired = -PMT(NOMINAL(ret,12)/12, years*12, -lumpsum, corpusRequired, 1); // F19
+    const annualInvRequired = -PMT(ret, years, -lumpsum, corpusRequired, 1); // F21
+    const lumpsumRequired = -PV(ret, years, 0, corpusRequired); // F23
+
+    document.getElementById('pl_c_stats').innerHTML = `
+      <div class="pfp-stat"><div class="label">Years to Goal</div><div class="value">${years}</div></div>
+      <div class="pfp-stat pfp-gold"><div class="label">Corpus Required</div><div class="value">${inr(corpusRequired)}</div></div>
+      <div class="pfp-stat pfp-accent"><div class="label">Monthly Investment Required</div><div class="value">${inr(monthlyInvRequired)}</div></div>
+      <div class="pfp-stat"><div class="label">Annual Investment Required</div><div class="value">${inr(annualInvRequired)}</div></div>
+      <div class="pfp-stat"><div class="label">Lump Sum Required Today</div><div class="value">${inr(lumpsumRequired)}</div></div>
+    `;
+
+    /* Table: J (age), K (begin value), L (monthly investment), M (end value) — rows 12-34 in the original sheet (23 rows) */
+    const N = 23;
+    const J=[],K=[],L=[],M=[];
+    J[0]=age;
+    K[0]= J[0]<goalAge ? lumpsum : 'NA';
+    L[0]= J[0]<goalAge ? monthlyInv : 'NA';
+    M[0]= J[0]<goalAge ? FV(NOMINAL(ret,12)/12, 12, -L[0], -K[0], 1) : 'NA';
+    for(let i=1;i<N;i++){
+      J[i] = J[i-1]+1;
+      K[i] = J[i]<goalAge ? M[i-1] : 'NA';
+      L[i] = J[i]<goalAge ? L[i-1]+L[i-1]*stepUp : 'NA';
+      M[i] = J[i]<goalAge ? FV(NOMINAL(ret,12)/12, 12, -L[i], -K[i], 1) : 'NA';
+    }
+
+    let h = '<thead><tr><th>Age of Child</th><th>Beginning Value</th><th>Monthly Investment</th><th>Value at End of Year</th></tr></thead><tbody>';
+    for(let i=0;i<N;i++){
+      const na = isNA(K[i]);
+      h += `<tr class="${na?'pfp-na':''}"><td>${J[i]}</td><td>${na?'—':inr(K[i])}</td><td>${na?'—':inr(L[i])}</td><td>${na?'—':inr(M[i])}</td></tr>`;
+    }
+    h += '</tbody>';
+    document.getElementById('pl_c_table').innerHTML = h;
+  }
+
+  root.addEventListener('input', calc);
+  calc();
+})();
+
+(function(){
+  const root = document.getElementById('pl-sip-root');
+
+  root.innerHTML = `
+    <div class="pfp-grid pfp-cols-2">
+      <div class="pfp-card">
+        <h3>Step-Up SIP — by Percentage (X%)<span class="pfp-section-tag">Left Table</span></h3>
+        <div class="pfp-field"><label>Planned Monthly Investment</label>
+          <div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_s_monthly" value="10000"></div></div>
+        <div class="pfp-field"><label>Number of Years of Investment</label><input type="number" id="pl_s_years" value="15"></div>
+        <div class="pfp-field"><label>Return Expected</label>
+          <div class="pfp-input-wrap"><input class="pfp-has-suffix" type="number" step="0.1" id="pl_s_return" value="12"><span class="pfp-suffix">%</span></div></div>
+        <div class="pfp-field"><label>Expected Annual Incremental Rate</label>
+          <div class="pfp-input-wrap"><input class="pfp-has-suffix" type="number" step="0.1" id="pl_s_stepPct" value="10"><span class="pfp-suffix">%</span></div></div>
+        <div class="pfp-field"><label>Holding Period <span class="pfp-hint">(years after SIP stops)</span></label><input type="number" id="pl_s_hold" value="0"></div>
+      </div>
+      <div class="pfp-card">
+        <h3>Step-Up SIP — by Fixed Value (X)<span class="pfp-section-tag">Right Table</span></h3>
+        <div class="pfp-field"><label>Planned Monthly Investment <span class="pfp-hint">(mirrors left panel)</span></label>
+          <div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="text" id="pl_s2_monthly" readonly disabled></div></div>
+        <div class="pfp-field"><label>Number of Years of Investment <span class="pfp-hint">(mirrors left panel)</span></label><input type="text" id="pl_s2_years" readonly disabled></div>
+        <div class="pfp-field"><label>Return Expected <span class="pfp-hint">(mirrors left panel)</span></label>
+          <div class="pfp-input-wrap"><input class="pfp-has-suffix" type="text" id="pl_s2_return" readonly disabled><span class="pfp-suffix">%</span></div></div>
+        <div class="pfp-field"><label>Expected Annual Incremental Value</label>
+          <div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_s_stepVal" value="1000"></div></div>
+        <div class="pfp-field"><label>Holding Period <span class="pfp-hint">(years after SIP stops)</span></label><input type="number" id="pl_s_hold2" value="0"></div>
+      </div>
+    </div>
+
+    <div class="pfp-results-row" id="pl_s_stats"></div>
+
+    <div class="pfp-grid pfp-cols-2">
+      <div>
+        <div class="pfp-section-title"><h2>Percentage Step-Up — Projection</h2></div>
+        <div class="pfp-table-scroll"><table id="pl_s_table1"></table></div>
+      </div>
+      <div>
+        <div class="pfp-section-title"><h2>Fixed-Value Step-Up — Projection</h2></div>
+        <div class="pfp-table-scroll"><table id="pl_s_table2"></table></div>
+      </div>
+    </div>
+    <p class="pfp-footnote">Formulas reproduced: each year's end value = FV(NOMINAL(Return,12)/12, 12, −Monthly Investment, −Beginning Value, 1). Left panel's monthly amount grows by the incremental percentage each year; right panel grows by the fixed incremental value.</p>
+  `;
+
+  function calc(){
+    const monthly = num('pl_s_monthly');
+    const years = num('pl_s_years');
+    const ret = pctVal('pl_s_return');
+    const stepPct = pctVal('pl_s_stepPct');
+    const hold = num('pl_s_hold');
+    const stepVal = num('pl_s_stepVal');
+    const hold2 = num('pl_s_hold2');
+
+    // right panel mirrors left panel's core inputs
+    document.getElementById('pl_s2_monthly').value = monthly.toFixed(2);
+    document.getElementById('pl_s2_years').value = years;
+    document.getElementById('pl_s2_return').value = (ret*100).toFixed(2);
+
+    /* ---- Left table: D:G, rows 13-112 (100 rows) — percentage step-up ---- */
+    const N = 100;
+    const D=[],E=[],F=[],G=[];
+    D[0]=1;
+    E[0]= D[0]>0 ? 0 : 'NA';
+    F[0]= D[0]>0 ? monthly : 'NA';
+    G[0]= D[0]>0 ? FV(NOMINAL(ret,12)/12,12,-F[0],-E[0],1) : 'NA';
+    for(let i=1;i<N;i++){
+      D[i] = (isNA(D[i-1]) || D[i-1]+1 > years+hold) ? 'NA' : D[i-1]+1;
+      E[i] = isNA(D[i]) ? 'NA' : G[i-1];
+      F[i] = (!isNA(D[i]) && D[i]<=years) ? F[i-1]+F[i-1]*stepPct : 0;
+      G[i] = isNA(D[i]) ? 'NA' : FV(NOMINAL(ret,12)/12,12,-F[i],-E[i],1);
+    }
+
+    /* ---- Right table: Q:T, rows 13-112 (100 rows) — fixed-value step-up ---- */
+    const Qc=[],R=[],S=[],T=[];
+    Qc[0]=1;
+    R[0]= Qc[0]>0 ? 0 : 'NA';
+    S[0]= Qc[0]>0 ? monthly : 'NA';
+    T[0]= Qc[0]>0 ? FV(NOMINAL(ret,12)/12,12,-S[0],-R[0],1) : 'NA';
+    for(let i=1;i<N;i++){
+      Qc[i] = (isNA(Qc[i-1]) || Qc[i-1]+1 > years+hold2) ? 'NA' : Qc[i-1]+1;
+      R[i] = isNA(Qc[i]) ? 'NA' : T[i-1];
+      S[i] = (!isNA(Qc[i]) && Qc[i]<=years) ? S[i-1]+stepVal : 0;
+      T[i] = isNA(Qc[i]) ? 'NA' : FV(NOMINAL(ret,12)/12,12,-S[i],-R[i],1);
+    }
+
+    const finalLeft = [...G].reverse().find(v=>!isNA(v));
+    const finalRight = [...T].reverse().find(v=>!isNA(v));
+    document.getElementById('pl_s_stats').innerHTML = `
+      <div class="pfp-stat pfp-accent"><div class="label">Percentage Step-Up — Final Value</div><div class="value">${inr(finalLeft)}</div></div>
+      <div class="pfp-stat pfp-accent"><div class="label">Fixed-Value Step-Up — Final Value</div><div class="value">${inr(finalRight)}</div></div>
+      <div class="pfp-stat"><div class="label">Investment Horizon</div><div class="value">${years} yrs${hold?(' + '+hold+' hold'):''}</div></div>
+    `;
+
+    let h1 = '<thead><tr><th>Year</th><th>Beginning Value</th><th>Monthly Investment</th><th>Value at Year End</th></tr></thead><tbody>';
+    for(let i=0;i<N;i++){
+      const na = isNA(D[i]);
+      h1 += `<tr class="${na?'pfp-na':''}"><td>${na?'—':D[i]}</td><td>${isNA(E[i])?'—':inr(E[i])}</td><td>${inr(F[i])}</td><td>${isNA(G[i])?'—':inr(G[i])}</td></tr>`;
+    }
+    h1 += '</tbody>';
+    document.getElementById('pl_s_table1').innerHTML = h1;
+
+    let h2 = '<thead><tr><th>Year</th><th>Beginning Value</th><th>Monthly Investment</th><th>Value at Year End</th></tr></thead><tbody>';
+    for(let i=0;i<N;i++){
+      const na = isNA(Qc[i]);
+      h2 += `<tr class="${na?'pfp-na':''}"><td>${na?'—':Qc[i]}</td><td>${isNA(R[i])?'—':inr(R[i])}</td><td>${inr(S[i])}</td><td>${isNA(T[i])?'—':inr(T[i])}</td></tr>`;
+    }
+    h2 += '</tbody>';
+    document.getElementById('pl_s_table2').innerHTML = h2;
+  }
+
+  root.addEventListener('input', calc);
+  calc();
+})();
+
+(function(){
+  const root = document.getElementById('pl-budget-root');
+
+  root.innerHTML = `
+    <div class="pfp-grid pfp-cols-2">
+      <div>
+        <div class="pfp-flow-header">Monthly In Flows</div>
+        <div class="pfp-flow-body">
+          <div class="pfp-field"><label>Monthly Income</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_income" value="120000"></div></div>
+          <div class="pfp-field"><label>Additional Income</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_addlIncome" value="0"></div></div>
+          <div class="pfp-field"><label>Rental Income</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_rental" value="0"></div></div>
+          <div class="pfp-field"><label>Spouse's Income</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_spouse" value="0"></div></div>
+        </div>
+      </div>
+      <div>
+        <div class="pfp-flow-header">EMIs</div>
+        <div class="pfp-flow-body">
+          <div class="pfp-field"><label>Home Loan EMI</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_emiHome" value="20000"></div></div>
+          <div class="pfp-field"><label>Car Loan EMI</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_emiCar" value="0"></div></div>
+          <div class="pfp-field"><label>Personal Loan EMI</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_emiPersonal" value="0"></div></div>
+          <div class="pfp-field"><label>Other EMIs</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_emiOther" value="0"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pfp-grid pfp-cols-2" style="margin-top:14px;">
+      <div>
+        <div class="pfp-flow-header">Essential Expenses</div>
+        <div class="pfp-flow-body">
+          <div class="pfp-field"><label>House Rent &amp; Maintenance</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_rent" value="0"></div></div>
+          <div class="pfp-field"><label>Property Tax</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_propTax" value="0"></div></div>
+          <div class="pfp-field"><label>Utilities</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_utilities" value="3000"></div></div>
+          <div class="pfp-field"><label>Groceries</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_groceries" value="10000"></div></div>
+          <div class="pfp-field"><label>Transportation</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_transport" value="5000"></div></div>
+          <div class="pfp-field"><label>Medical Expenses</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_medical" value="2000"></div></div>
+          <div class="pfp-field"><label>Children School Fees</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_school" value="0"></div></div>
+          <div class="pfp-field"><label>Insurance Premiums</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_insurance" value="2000"></div></div>
+        </div>
+      </div>
+      <div>
+        <div class="pfp-flow-header">Investments</div>
+        <div class="pfp-flow-body">
+          <div class="pfp-field"><label>Mutual Funds</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_mf" value="15000"></div></div>
+          <div class="pfp-field"><label>Stocks</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_stocks" value="0"></div></div>
+          <div class="pfp-field"><label>Fixed Deposits</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_fd" value="0"></div></div>
+          <div class="pfp-field"><label>Others</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_investOther" value="0"></div></div>
+        </div>
+        <div class="pfp-flow-header" style="margin-top:14px;">Lifestyle Expenses</div>
+        <div class="pfp-flow-body">
+          <div class="pfp-field"><label>Maid</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_maid" value="3000"></div></div>
+          <div class="pfp-field"><label>Shopping</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_shopping" value="5000"></div></div>
+          <div class="pfp-field"><label>Travel</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_travel" value="2000"></div></div>
+          <div class="pfp-field"><label>Dine &amp; Entertainment</label><div class="pfp-input-wrap"><span class="pfp-prefix">₹</span><input class="pfp-has-prefix" type="number" id="pl_b_dine" value="3000"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pfp-results-row" id="pl_b_stats"></div>
+
+    <div class="pfp-section-title"><h2>The Current Status</h2><p>Corresponds to the summary table (H25:K30) — compares each category's share of total inflow against the workbook's built-in thresholds.</p></div>
+    <div class="pfp-table-scroll"><table class="pfp-assess-table" id="pl_b_assess"></table></div>
+  `;
+
+  function calc(){
+    const income = num('pl_b_income'), addl = num('pl_b_addlIncome'), rental = num('pl_b_rental'), spouse = num('pl_b_spouse');
+    const totalInflow = income+addl+rental+spouse; // E11
+
+    const essentials = ['b_rent','b_propTax','b_utilities','b_groceries','b_transport','b_medical','b_school','b_insurance'].reduce((s,id)=>s+num(id),0); // I15
+    const lifestyle = ['b_maid','b_shopping','b_travel','b_dine'].reduce((s,id)=>s+num(id),0); // I20
+    const totalEmi = ['b_emiHome','b_emiCar','b_emiPersonal','b_emiOther'].reduce((s,id)=>s+num(id),0); // M11
+    const totalInvest = ['b_mf','b_stocks','b_fd','b_investOther'].reduce((s,id)=>s+num(id),0); // M16
+    const totalOutflow = essentials+lifestyle+totalEmi+totalInvest; // M20
+    const leftout = totalInflow - totalOutflow; // M19
+
+    const pctEssential = totalInflow? essentials/totalInflow : NaN; // J15
+    const pctLifestyle = totalInflow? lifestyle/totalInflow : NaN; // J20
+    const pctEmi = totalInflow? totalEmi/totalInflow : NaN; // N11
+    const pctInvest = totalInflow? totalInvest/totalInflow : NaN; // N16
+    const pctLeftout = totalInflow? leftout/totalInflow : NaN; // N19
+
+    document.getElementById('pl_b_stats').innerHTML = `
+      <div class="pfp-stat pfp-accent"><div class="label">Total Monthly Inflow</div><div class="value">${inr(totalInflow)}</div></div>
+      <div class="pfp-stat"><div class="label">Total Outflow</div><div class="value">${inr(totalOutflow)}</div></div>
+      <div class="pfp-stat"><div class="label">Total EMIs</div><div class="value">${inr(totalEmi)}</div></div>
+      <div class="pfp-stat"><div class="label">Total Investments</div><div class="value">${inr(totalInvest)}</div></div>
+      <div class="pfp-stat pfp-gold"><div class="label">Left Out for the Month</div><div class="value">${inr(leftout)}</div></div>
+    `;
+
+    const rows = [
+      {name:'Essential Expenses', value:essentials, pct:pctEssential, ok: pctEssential<0.40, okMsg:'The expenses are in line with the income', badMsg:'Cut the unnecessary expenses'},
+      {name:'Life Style Expenses', value:lifestyle, pct:pctLifestyle, ok: pctLifestyle<0.20, okMsg:'The expenses are in line with the income', badMsg:'Cut the unnecessary expenses'},
+      {name:'EMIs', value:totalEmi, pct:pctEmi, ok: pctEmi<0.30, okMsg:'The leverage utilisation is good', badMsg:'Need to close the loans with higher rate ASAP'},
+      {name:'Investments', value:totalInvest, pct:pctInvest, ok: pctInvest>=0.20, okMsg:'Maintain the investment, if possible increase', badMsg:'Increase the investment'},
+      {name:'Leftout', value:leftout, pct:pctLeftout, ok: pctLeftout<=0.10, okMsg:'Fill the bucket of emergency fund', badMsg:'Move some funds to investment'},
+    ];
+    let h = '<thead><tr><th>Name</th><th>Value</th><th>Percentage</th><th>The Current Status</th></tr></thead><tbody>';
+    rows.forEach(r=>{
+      h += `<tr><td>${r.name}</td><td>${inr(r.value)}</td><td>${pctStr(r.pct)}</td><td><span class="pfp-assess-badge ${r.ok?'ok':'warn'}">${r.ok?r.okMsg:r.badMsg}</span></td></tr>`;
+    });
+    h += '</tbody>';
+    document.getElementById('pl_b_assess').innerHTML = h;
+  }
+
+  root.addEventListener('input', calc);
+  calc();
+})();
+
+})();
 </script>
 </div><!-- /fv-app -->
 </body>
